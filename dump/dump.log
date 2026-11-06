@@ -1,0 +1,62 @@
+19:31:58 === UZ801 firmware dump start ===
+fingerprint: qcom/msm8916_32_512/msm8916_32_512:4.4.4/KTU84P/eng..20240812:userdebug/test-keys
+19:31:58 found 27 partitions
+/dev/block/bootdevice/by-name/aboot: 1 file pulled, 0 skipped. 5.3 MB/s (1048576 bytes in 0.188s)
+19:31:58 OK    aboot  1048576B  md5=3629526c7655c9823651d3f6887a3455
+/dev/block/bootdevice/by-name/abootbak: 1 file pulled, 0 skipped. 5.2 MB/s (1048576 bytes in 0.191s)
+19:31:58 OK    abootbak  1048576B  md5=744b0948fdcef509b375aa149998d019
+/dev/block/bootdevice/by-name/boot: 1 file pulled, 0 skipped. 5.7 MB/s (16777216 bytes in 2.791s)
+19:32:02 OK    boot  16777216B  md5=146a62facd70a643d0148dc5469dd9ca
+19:32:02 SKIP  cache (runtime/user data)
+/dev/block/bootdevice/by-name/DDR: 1 file pulled, 0 skipped. 2.5 MB/s (32768 bytes in 0.013s)
+19:32:02 OK    DDR  32768B  md5=bb7df04e1b0a2570657527a7e108ae23
+/dev/block/bootdevice/by-name/fsc: 1 file pulled, 0 skipped. 0.0 MB/s (1024 bytes in 0.042s)
+19:32:02 OK    fsc  1024B  md5=0f343b0931126a20f133d67c2b018a3b
+/dev/block/bootdevice/by-name/fsg: 1 file pulled, 0 skipped. 4.6 MB/s (1572864 bytes in 0.326s)
+19:32:02 OK    fsg  1572864B  md5=ba1d2a2dc02f7b6ad3486a26c9b6203e
+/dev/block/bootdevice/by-name/hyp: 1 file pulled, 0 skipped. 3.9 MB/s (524288 bytes in 0.129s)
+19:32:02 OK    hyp  524288B  md5=7bec23c5cd2f726950f56d9d20df85ea
+/dev/block/bootdevice/by-name/hypbak: 1 file pulled, 0 skipped. 3.9 MB/s (524288 bytes in 0.129s)
+19:32:02 OK    hypbak  524288B  md5=7bec23c5cd2f726950f56d9d20df85ea
+/dev/block/bootdevice/by-name/misc: 1 file pulled, 0 skipped. 5.3 MB/s (1048576 bytes in 0.188s)
+19:32:03 OK    misc  1048576B  md5=b6d81b360a5672d80c27430f39153e2c
+/dev/block/bootdevice/by-name/modem: 1 file pulled, 0 skipped. 5.7 MB/s (67108864 bytes in 11.269s)
+19:32:16 OK    modem  67108864B  md5=3ef9ff05660b63c8ab880c752db18262
+/dev/block/bootdevice/by-name/modemst1: 1 file pulled, 0 skipped. 5.7 MB/s (1572864 bytes in 0.262s)
+19:32:17 OK    modemst1  1572864B  md5=b980f375662e79b6c8eb9bcb4d4a4826
+/dev/block/bootdevice/by-name/modemst2: 1 file pulled, 0 skipped. 5.4 MB/s (1572864 bytes in 0.280s)
+19:32:17 OK    modemst2  1572864B  md5=e2fbbdae0f41a99389b29d15c9e05c6d
+/dev/block/bootdevice/by-name/pad: 1 file pulled, 0 skipped. 5.2 MB/s (1048576 bytes in 0.192s)
+19:32:17 OK    pad  1048576B  md5=b6d81b360a5672d80c27430f39153e2c
+/dev/block/bootdevice/by-name/persist: 1 file pulled, 0 skipped. 6.7 MB/s (33554432 bytes in 4.804s)
+19:32:23 OK    persist  33554432B  md5=8ff1987f59fb3a43ce83f56731b76068
+/dev/block/bootdevice/by-name/recovery: 1 file pulled, 0 skipped. 6.1 MB/s (16777216 bytes in 2.617s)
+19:32:26 OK    recovery  16777216B  md5=d55c4bdfe8f732f0a731b0e3302de347
+/dev/block/bootdevice/by-name/rpm: 1 file pulled, 0 skipped. 3.8 MB/s (524288 bytes in 0.132s)
+19:32:26 OK    rpm  524288B  md5=bf01c76356c44d93dbcfc0a838a04a4c
+/dev/block/bootdevice/by-name/rpmbak: 1 file pulled, 0 skipped. 4.3 MB/s (524288 bytes in 0.116s)
+19:32:27 OK    rpmbak  524288B  md5=bf01c76356c44d93dbcfc0a838a04a4c
+/dev/block/bootdevice/by-name/sbl1: 1 file pulled, 0 skipped. 3.8 MB/s (524288 bytes in 0.131s)
+19:32:27 OK    sbl1  524288B  md5=c0a7173100459a1dffb45a476f115c42
+/dev/block/bootdevice/by-name/sbl1bak: 1 file pulled, 0 skipped. 4.1 MB/s (524288 bytes in 0.123s)
+19:32:27 OK    sbl1bak  524288B  md5=c0a7173100459a1dffb45a476f115c42
+/dev/block/bootdevice/by-name/sec: 1 file pulled, 0 skipped. 0.4 MB/s (16384 bytes in 0.044s)
+19:32:27 OK    sec  16384B  md5=fb63b6dae01116fc4236baa35cd10147
+/dev/block/bootdevice/by-name/splash: 1 file pulled, 0 skipped. 6.3 MB/s (10485760 bytes in 1.576s)
+19:32:29 OK    splash  10485760B  md5=f1c9645dbc14efddc7d8a322685f26eb
+/dev/block/bootdevice/by-name/ssd: 1 file pulled, 0 skipped. 0.2 MB/s (8192 bytes in 0.043s)
+19:32:29 OK    ssd  8192B  md5=0829f71740aab1ab98b33eae21dee122
+/dev/block/bootdevice/by-name/system: 1 file pulled, 0 skipped. 6.0 MB/s (838860800 bytes in 134.300s)
+19:35:01 OK    system  838860800B  md5=ea99a01835924d206723d309512be70f
+/dev/block/bootdevice/by-name/tz: 1 file pulled, 0 skipped. 4.5 MB/s (524288 bytes in 0.110s)
+19:35:01 OK    tz  524288B  md5=cba169092f3af6da721fb58aaffd908e
+/dev/block/bootdevice/by-name/tzbak: 1 file pulled, 0 skipped. 4.5 MB/s (524288 bytes in 0.111s)
+19:35:02 OK    tzbak  524288B  md5=cba169092f3af6da721fb58aaffd908e
+19:35:02 SKIP  userdata (runtime/user data)
+19:35:02 === GPT ===
+/data/local/tmp/gpt_primary.bin: 1 file pulled, 0 skipped. 5.6 MB/s (1048576 bytes in 0.178s)
+/data/local/tmp/gpt_backup.bin: 1 file pulled, 0 skipped. 5.5 MB/s (1048576 bytes in 0.183s)
+19:35:02 GPT disk size = 7634944 sectors of 512B
+19:35:03 === DONE: ok=25 fail=0 skipped=2 ===
+19:35:03 images in /path/to/4g-usb-dogle/dump ; manifest: /path/to/4g-usb-dogle/dump/manifest.md5
+953M	/path/to/4g-usb-dogle/dump

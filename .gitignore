@@ -1,0 +1,14 @@
+# Firmware partition blobs — 953 MB of binary images; keep them out of git
+# (no remote yet, and git handles large binaries poorly). The text records in
+# dump/ (manifest.md5, dump.log, *.txt, gpt_*.bin) ARE tracked so the dump is
+# documented. Keep the .img files backed up separately (they are the EDL restore set).
+dump/*.img
+
+# Python dev leftovers from the old PC-side proxy
+.mypy_cache/
+__pycache__/
+*.pyc
+
+# Editor / OS cruft
+*.swp
+.DS_Store

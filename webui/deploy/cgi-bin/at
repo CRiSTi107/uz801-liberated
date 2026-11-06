@@ -1,0 +1,32 @@
+#!/system/bin/sh
+# CGI: run a raw modem AT command via the on-device modem_at helper (/dev/smd11).
+# Served by busybox httpd on :8088 at /cgi-bin/at. Runs as root (httpd uid).
+# Request:  POST  body = {"at":"AT+CGSN"}  (or raw "AT+CGSN")
+# Response: {"ok":true,"cmd":"AT+CGSN","raw":"+CGSN:...\nOK"}
+echo "Content-type: application/json"
+echo "Cache-Control: no-store"
+echo ""
+
+LEN="${CONTENT_LENGTH:-0}"
+BODY=""
+case "$LEN" in ''|*[!0-9]*) LEN=0 ;; esac
+[ "$LEN" -gt 0 ] && BODY=$(busybox head -c "$LEN")
+
+# Pull "at" out of a tiny JSON body; else treat the whole body as the command.
+AT=$(echo "$BODY" | busybox sed -n 's/.*"at"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+[ -z "$AT" ] && AT="$BODY"
+
+if [ -z "$AT" ]; then
+  echo '{"ok":false,"error":"empty AT command"}'
+  exit 0
+fi
+
+OUT=$(modem_at "$AT" 2>&1)
+
+# JSON-escape: backslash, doublequote, strip CR, newline -> \n
+ESC=$(echo "$OUT" \
+  | busybox sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\r//g' \
+  | busybox awk 'NR>1{printf "\\n"} {printf "%s", $0}')
+CMDE=$(echo "$AT" | busybox sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+
+echo "{\"ok\":true,\"cmd\":\"$CMDE\",\"raw\":\"$ESC\"}"

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UZ801 4G Dongle Manager</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Inline SVG favicon so there is no external request. -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#128246;</text></svg>">
+</head>
+<body>
+
+<!-- ===================== Login overlay (funcNo 1000) ===================== -->
+<div id="login" role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <div class="card box">
+    <h2 id="login-title">Sign in to the dongle</h2>
+    <form id="login-form">
+      <label class="field">
+        <span>Username</span>
+        <input id="login-user" name="username" autocomplete="username"
+               placeholder="admin">
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="login-pass" name="password" type="password"
+               autocomplete="current-password" placeholder="admin">
+      </label>
+      <div class="hint">Default credentials are usually <b>admin</b> / <b>admin</b>.</div>
+      <div class="row end mt">
+        <button type="button" class="btn ghost" id="login-skip">Skip (read-only)</button>
+        <button type="submit" class="btn">Sign in</button>
+      </div>
+      <div id="login-err" class="hint" style="color:var(--bad)"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================== App shell ============================== -->
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="dot" id="conn-dot" title="connection state"></span>
+      <span>UZ801 Manager</span>
+    </div>
+    <nav class="nav" id="nav" aria-label="Sections">
+      <button data-view="dashboard" class="active"><span class="ico">&#9632;</span><span class="label-txt">Dashboard</span></button>
+      <button data-view="network"><span class="ico">&#9729;</span><span class="label-txt">Network</span></button>
+      <button data-view="sim"><span class="ico">&#9743;</span><span class="label-txt">SIM / APN</span></button>
+      <button data-view="identity"><span class="ico">&#9873;</span><span class="label-txt">Identity</span></button>
+      <button data-view="wifi"><span class="ico">&#9775;</span><span class="label-txt">WiFi</span></button>
+      <button data-view="macfilter"><span class="ico">&#9783;</span><span class="label-txt">MAC Filter</span></button>
+      <button data-view="firmware"><span class="ico">&#8679;</span><span class="label-txt">Firmware</span></button>
+      <button data-view="developer"><span class="ico">&#9888;</span><span class="label-txt">Developer</span></button>
+      <button data-view="settings"><span class="ico">&#9881;</span><span class="label-txt">Settings</span></button>
+    </nav>
+    <div class="spacer"></div>
+    <div class="side-foot">
+      <div id="auth-state">Not signed in</div>
+      <div class="mono" id="fw-foot">fw: --</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="offline">
+      Device unreachable. Check that you are connected to the dongle's WiFi or
+      USB network (<span class="mono">192.168.100.1</span>). Auto-refresh keeps retrying.
+    </div>
+
+    <!-- ========================= DASHBOARD ========================= -->
+    <section class="view active" id="view-dashboard">
+      <div class="page-head">
+        <div>
+          <h1>Dashboard</h1>
+          <div class="sub">Live device status</div>
+        </div>
+        <div class="row">
+          <label class="switch">
+            <input type="checkbox" id="pause-toggle"> Pause auto-refresh
+          </label>
+          <button class="btn ghost small" id="refresh-now">Refresh now</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card stat">
+          <div class="label">Connection</div>
+          <div class="value"><span id="d-conn">--</span></div>
+          <div class="mt"><span class="badge" id="d-conn-badge">unknown</span></div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Operator</div>
+          <div class="value" id="d-oper">--</div>
+          <div class="mt muted" id="d-netmode">net mode --</div>
+        </div>
+
+        <div class="card">
+          <div class="label">Signal</div>
+          <div class="row" style="align-items:center;gap:14px;margin-top:8px">
+            <div class="signal" id="d-signal" aria-hidden="true">
+              <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+              <span class="bar"></span><span class="bar"></span>
+            </div>
+            <div class="value" style="font-size:20px">
+              <span id="d-dbm">--</span> <span class="unit">dBm</span>
+            </div>
+          </div>
+          <div class="muted mt" id="d-rssi">rssi --</div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Clients</div>
+          <div class="value"><span id="d-clients">--</span><span class="unit" id="d-clients-max"></span></div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Downloaded</div>
+          <div class="value" id="d-down">--</div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Uploaded</div>
+          <div class="value" id="d-up">--</div>
+        </div>
+
+        <div class="card">
+          <h2>IP / DNS</h2>
+          <dl class="kv">
+            <dt>WAN IP</dt><dd id="d-ip">--</dd>
+            <dt>Mask</dt><dd id="d-mask">--</dd>
+            <dt>DNS 1</dt><dd id="d-dns1">--</dd>
+            <dt>DNS 2</dt><dd id="d-dns2">--</dd>
+            <dt>LAN IP</dt><dd id="d-wlan">--</dd>
+          </dl>
+        </div>
+
+        <div class="card">
+          <h2>SIM</h2>
+          <dl class="kv">
+            <dt>Status</dt><dd id="d-sim">--</dd>
+            <dt>IMSI</dt><dd id="d-imsi">--</dd>
+            <dt>ICCID</dt><dd id="d-iccid">--</dd>
+          </dl>
+          <div class="hint mt">Note: this panel's SIM status can be unreliable on
+            the UZ801 - trust modem AT output if it disagrees.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= NETWORK ========================= -->
+    <section class="view" id="view-network">
+      <div class="page-head"><div><h1>Network</h1>
+        <div class="sub">Connection and radio mode</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>Status (funcNo 1001)</h2>
+          <dl class="kv">
+            <dt>Network</dt><dd id="n-netstatus">--</dd>
+            <dt>Operator</dt><dd id="n-oper">--</dd>
+            <dt>Net mode</dt><dd id="n-netmode">--</dd>
+            <dt>RSSI</dt><dd id="n-rssi">--</dd>
+          </dl>
+          <button class="btn ghost small mt" id="n-refresh">Refresh</button>
+        </div>
+
+        <div class="card">
+          <h2>Radio / net mode (funcNo 1005)</h2>
+          <label class="field">
+            <span>Preferred network</span>
+            <select id="n-mode-sel">
+              <option value="0">Auto (2G/3G/4G)</option>
+              <option value="1">3G only</option>
+              <option value="2">4G only</option>
+            </select>
+          </label>
+          <button class="btn" id="n-mode-apply">Apply net mode</button>
+        </div>
+
+        <div class="card">
+          <h2>Connection mode (funcNo 1004)</h2>
+          <label class="field">
+            <span>Dial mode</span>
+            <select id="n-conn-sel">
+              <option value="auto">Auto connect</option>
+              <option value="manual">Manual</option>
+            </select>
+          </label>
+          <button class="btn" id="n-conn-apply">Apply connection mode</button>
+          <div class="hint mt">Field name for 1004 is unverified; see README.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= SIM / APN ========================= -->
+    <section class="view" id="view-sim">
+      <div class="page-head"><div><h1>SIM / APN</h1>
+        <div class="sub">SIM status and data profile</div></div></div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>SIM status (funcNo 1015)</h2>
+          <dl class="kv">
+            <dt>Status</dt><dd id="s-status">--</dd>
+            <dt>IMSI</dt><dd id="s-imsi">--</dd>
+            <dt>ICCID</dt><dd id="s-iccid">--</dd>
+          </dl>
+          <button class="btn ghost small mt" id="s-refresh">Refresh</button>
+        </div>
+
+        <div class="card">
+          <h2>APN profile (funcNo 1016-1018)</h2>
+          <div class="warnbox unverified">
+            Unverified: the exact 1016-1018 field names are unknown. This form
+            sends sensible defaults; adjust fields if the device rejects them.
+          </div>
+          <form id="apn-form">
+            <label class="field"><span>APN</span>
+              <input name="apn" placeholder="internet"></label>
+            <label class="field"><span>Username</span>
+              <input name="user" autocomplete="off"></label>
+            <label class="field"><span>Password</span>
+              <input name="pwd" type="password" autocomplete="off"></label>
+            <label class="field"><span>Auth type</span>
+              <select name="auth">
+                <option value="0">None</option>
+                <option value="1">PAP</option>
+                <option value="2">CHAP</option>
+                <option value="3">PAP/CHAP</option>
+              </select></label>
+            <div class="row">
+              <button type="button" class="btn ghost" id="apn-read">Read (1016)</button>
+              <button type="submit" class="btn">Save profile (1017)</button>
+              <button type="button" class="btn" id="apn-connect">Connect (1018)</button>
+            </div>
+          </form>
+          <div class="hint mt">Digi Romania APN is <span class="mono">internet</span>.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= IDENTITY ========================= -->
+    <section class="view" id="view-identity">
+      <div class="page-head"><div><h1>Identity &amp; Modem</h1>
+        <div class="sub">Device IMEI and SIM identifiers</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>Device identity (funcNo 1029)</h2>
+          <dl class="kv">
+            <dt>Manufacturer</dt><dd id="id-manu">--</dd>
+            <dt>Firmware</dt><dd id="id-fw">--</dd>
+            <dt>IMEI</dt><dd class="mono" id="id-imei">--</dd>
+          </dl>
+          <button class="btn ghost small mt" id="id-refresh">Refresh</button>
+        </div>
+
+        <div class="card">
+          <h2>Change IMEI (funcNo 2002)</h2>
+          <div class="warnbox">
+            Writes the modem IMEI via <span class="mono">AT+WRIMEI</span>. Changing
+            the IMEI of a device may be <b>illegal in your jurisdiction</b> and can
+            disrupt network registration. The modem usually needs a reboot/CFUN
+            cycle for the new value to take effect. Use only on your own hardware.
+          </div>
+          <label class="field"><span>New IMEI (15 digits)</span>
+            <input id="id-imei-new" class="mono" inputmode="numeric" maxlength="15"
+                   placeholder="8600180460XXXXX"></label>
+          <button class="btn" id="id-imei-write">Write IMEI</button>
+        </div>
+
+        <div class="card">
+          <h2>SIM identity (funcNo 1015)</h2>
+          <dl class="kv">
+            <dt>Status</dt><dd id="id-sim-status">--</dd>
+            <dt>IMSI</dt><dd class="mono" id="id-imsi">--</dd>
+            <dt>ICCID</dt><dd class="mono" id="id-iccid">--</dd>
+          </dl>
+          <button class="btn ghost small mt" id="id-sim-refresh">Refresh</button>
+          <div class="hint mt">IMSI and ICCID are stored on the SIM card itself and
+            <b>cannot be changed on the device</b> — they belong to the SIM, not the modem.
+            To change them you need a programmable (sysmo/writable) SIM.</div>
+        </div>
+
+        <div class="card">
+          <h2>Advanced AT commands</h2>
+          <p class="muted">Arbitrary modem AT commands (beyond IMEI) are not exposed
+            over the web API and this device's lightweight web server has no CGI.
+            Run them over USB adb instead:</p>
+          <pre class="mono codeblock">adb shell modem_at "AT+CGSN"      # read IMEI
+adb shell modem_at "AT+WRIMEI=&lt;imei&gt;"   # write IMEI
+adb shell modem_at "AT\$QCRSRP?"   # LTE RSRP / cell/band</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= WIFI ========================= -->
+    <section class="view" id="view-wifi">
+      <div class="page-head"><div><h1>WiFi</h1>
+        <div class="sub">Hotspot name, security and channel</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>WiFi settings (read 1006/1009 · SSID 1007 · security 1010)</h2>
+          <form id="wifi-form">
+            <label class="field"><span>SSID (4-32 chars)</span>
+              <input name="ssid" minlength="4" maxlength="32" placeholder="4G-UFI-XXX"></label>
+            <label class="field"><span>Password (WPA key, 8-63 chars)</span>
+              <input name="pwd" minlength="8" maxlength="63" placeholder="(WPA key)"></label>
+            <label class="field"><span>Encryption</span>
+              <select name="encryp_type">
+                <option value="0">None (open)</option>
+                <option value="1">WPA Personal TKIP</option>
+                <option value="2">WPA Personal CCMP</option>
+                <option value="3">WPA2 Personal TKIP</option>
+                <option value="4" selected>WPA2 Personal CCMP</option>
+              </select></label>
+            <label class="field"><span>Max clients</span>
+              <input name="maxSta" type="number" min="1" max="10" value="10"></label>
+            <div class="row">
+              <button type="button" class="btn ghost" id="wifi-read">Read current</button>
+              <button type="submit" class="btn">Save WiFi</button>
+            </div>
+          </form>
+          <div class="warnbox mt">Saving changes the hotspot security; connected
+            WiFi clients will drop and must reconnect with the new password.</div>
+          <div class="hint mt">MAC: <span class="mono" id="wifi-mac">--</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= MAC FILTER ========================= -->
+    <section class="view" id="view-macfilter">
+      <div class="page-head"><div><h1>MAC Filter</h1>
+        <div class="sub">Allow/deny client MAC addresses</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>MAC filter (funcNo 1011 / 1052-1055)</h2>
+          <div class="warnbox unverified">
+            Unverified: filter mode codes and the MAC list field are guesses.
+            Adjust in <span class="mono">js/app.js</span> if the device rejects them.
+          </div>
+          <label class="field"><span>Filter mode</span>
+            <select id="mac-mode">
+              <option value="0">Disabled</option>
+              <option value="1">Whitelist (allow only listed)</option>
+              <option value="2">Blacklist (deny listed)</option>
+            </select></label>
+          <label class="field"><span>Add MAC address</span>
+            <input id="mac-input" placeholder="AA:BB:CC:DD:EE:FF"></label>
+          <div class="row">
+            <button class="btn ghost small" id="mac-add">Add to list</button>
+            <button class="btn ghost small" id="mac-read">Read list (1052)</button>
+          </div>
+          <table class="mt"><thead><tr><th>MAC</th><th></th></tr></thead>
+            <tbody id="mac-list"></tbody></table>
+          <button class="btn mt" id="mac-apply">Apply filter (1055)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= FIRMWARE ========================= -->
+    <section class="view" id="view-firmware">
+      <div class="page-head"><div><h1>Firmware</h1>
+        <div class="sub">Device info, upload and upgrade</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>Device info (funcNo 3002)</h2>
+          <dl class="kv">
+            <dt>Device</dt><dd id="f-name">--</dd>
+            <dt>SW version</dt><dd id="f-sw">--</dd>
+          </dl>
+          <button class="btn ghost small mt" id="f-refresh">Refresh</button>
+        </div>
+
+        <div class="card">
+          <h2>Upload &amp; upgrade</h2>
+          <div class="warnbox">
+            A bad or interrupted firmware flash can brick the dongle. Make sure
+            power stays connected during the whole process.
+          </div>
+          <label class="field"><span>Firmware package</span>
+            <input type="file" id="fw-file"></label>
+          <button class="btn" id="fw-upload">Upload package</button>
+          <div class="progress" style="display:none" id="fw-prog-wrap">
+            <span id="fw-prog"></span>
+          </div>
+          <div class="hint" id="fw-upload-msg"></div>
+          <div class="row mt">
+            <button class="btn danger" id="fw-apply">Apply upgrade (3000)</button>
+            <button class="btn ghost" id="fw-delete">Delete staged package (3001)</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= DEVELOPER ========================= -->
+    <section class="view" id="view-developer">
+      <div class="page-head"><div><h1>Developer</h1>
+        <div class="sub">Advanced / dangerous operations</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>USB debug / root ADB (funcNo 2001)</h2>
+          <div class="warnbox">
+            <b>Danger.</b> This switches the USB composition to
+            <span class="mono">rndis,serial_smd,diag,adb</span> and exposes a
+            <b>root ADB shell</b> over USB. Only do this if you understand the
+            risk. Revert on-device with
+            <span class="mono">setprop persist.sys.usb.config rndis</span> + reboot.
+          </div>
+          <button class="btn danger" id="dev-adb">Enable USB debug / ADB</button>
+        </div>
+
+        <div class="card">
+          <h2>Power</h2>
+          <div class="row">
+            <button class="btn danger" id="dev-reboot">Reboot (1013)</button>
+            <button class="btn danger" id="dev-factory">Factory reset (1014)</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Raw funcNo console</h2>
+          <label class="field"><span>funcNo</span>
+            <input id="raw-func" type="number" placeholder="1001"></label>
+          <label class="field"><span>Extra JSON params (optional)</span>
+            <textarea id="raw-params" rows="3" placeholder='{"username":"admin"}'></textarea></label>
+          <button class="btn" id="raw-send">Send</button>
+          <pre class="mono mt" id="raw-out" style="white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:8px;border:1px solid var(--border);max-height:280px;overflow:auto"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= SETTINGS ========================= -->
+    <section class="view" id="view-settings">
+      <div class="page-head"><div><h1>Settings</h1>
+        <div class="sub">UI preferences and session</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>Auto-refresh</h2>
+          <label class="field"><span>Interval (seconds)</span>
+            <input id="set-interval" type="number" min="1" max="60" value="3"></label>
+          <button class="btn" id="set-save">Save</button>
+        </div>
+        <div class="card">
+          <h2>Session</h2>
+          <p class="muted">This UI is served by the dongle itself on
+            <span class="mono">:8088</span> and talks to the stock API at the
+            same origin via <span class="mono">/ajax</span> (reverse-proxied to
+            port 80). No PC or proxy process is required.</p>
+          <button class="btn ghost mt" id="set-login">Sign in / switch user</button>
+        </div>
+        <div class="card">
+          <h2>About</h2>
+          <p class="muted">Modern replacement UI for the UZ801 4G USB dongle
+            (Qualcomm MSM8916). Runs entirely on the device - nothing is sent
+            anywhere but the dongle itself.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Confirm dialog for destructive actions -->
+<dialog class="modal" id="confirm-modal">
+  <div class="m-body">
+    <h3 id="confirm-title">Are you sure?</h3>
+    <p id="confirm-text"></p>
+  </div>
+  <div class="m-foot">
+    <button class="btn ghost" id="confirm-cancel">Cancel</button>
+    <button class="btn danger" id="confirm-ok">Confirm</button>
+  </div>
+</dialog>
+
+<div id="toast-wrap" aria-live="polite"></div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
