@@ -676,10 +676,20 @@
           `${sv.usable === false ? ' — <b class="bad">unusable on this hardware</b>' : ""}` +
           `${cells ? `<br>Visible: ${esc(cells)}` : ""}`
         : "No serving cell reported yet.";
-      $("#band-note").textContent = b.configured
-        ? "Band-lock command is configured for this modem."
-        : "Band-lock command is NOT configured for this modem yet — applying will " +
-          "return setup guidance until platform.band_at is set in config.json.";
+      const apply = $("#band-apply"), sel = $("#band-sel");
+      if (b.configured) {
+        apply.disabled = false; sel.disabled = false;
+        $("#band-note").textContent = "Band-lock command is configured for this modem.";
+      } else {
+        // This modem's firmware exposes no LTE band-lock AT command (verified),
+        // so the control is display-only here; selection is automatic.
+        apply.disabled = true; sel.disabled = true;
+        $("#band-note").textContent =
+          "Band-lock isn't available on this modem's firmware (no LTE band-lock " +
+          "AT command), so this card is read-only. The radio already scans all " +
+          "supported bands (B1/B3/B5/B8/B40) and picks the best automatically; a " +
+          "strong B20 cell can't be used because the hardware lacks 800 MHz.";
+      }
     } catch (err) {
       if (err instanceof ApiError && err.offline) setOffline(true);
     }
