@@ -24,8 +24,15 @@ is unusable B20) → SMS/calls/data don't work yet. **Not software-fixable** —
 1. *(hardware, owner)* Fit the directional antenna → modem registers → then I can verify/finish
    **SMS send, voice call, and the voice audio-bridge spike** (tinymix routing during a live call),
    and bring up **Tailscale/AdGuard** (need WAN).
-2. *(optional, low-risk software)* SMS fast-fail timeout; expose host `/system`+property area to the
-   chroot so cockpit WiFi-**write**/restart + `getprop` work directly (finishes self-sufficiency).
+2. *(optional, low-risk software)* ~~SMS fast-fail timeout~~ ✅ done (2026-11-07 — `sms_send`
+   registration pre-check + prompt-timeout abort; API returns 409 not-registered).
+   ~~LTE band-lock feature~~ ✅ built end-to-end (2026-11-07 — `GET/POST /api/band`, Network-tab
+   "Band lock" card, Qualcomm LTE bitmask). **On-device TODO to make it live:** probe the real
+   band-lock AT command (`AT$QCBANDPREF=?` / `AT!BAND=?` / `AT^SETBAND=?` / `AT$QCRAT=?` via
+   `modem_at` or the cockpit raw-AT console — keep the one that doesn't answer `ERROR`), then set
+   `platform.band_at` in `config.json` per `config.example.json`. Until then POST returns 501.
+   Still open too: expose host `/system`+property area to the chroot so cockpit WiFi-**write**/restart
+   + `getprop` work directly (finishes self-sufficiency).
 3. *(gated — needs owner go-ahead + careful reboot test)* **Delete the stock app**: run
    `cockpit/api/deploy/uz-netservices.sh` host-side to take over hostapd/dnsmasq/NAT/data, verify
    WiFi/DHCP/data survive with the app `pm disable`d (USB-ADB lifeline), then remove the APK.
@@ -85,7 +92,8 @@ All services **auto-start on boot** via `/system/etc/init.qcom.post_boot.sh` →
 | Backdoor decommission | ✅ `:80`/`:8088` LAN-unreachable, OTA blocked (app not deleted) |
 | Cockpit API + dashboard | ✅ deployed, authenticated, boots automatically |
 | Direct (no-:80) reads | ✅ WiFi/clients/traffic/SIM/signal/device |
-| SMS / calls | ⏳ code done; **signal-gated** (modem must register — needs better signal/antenna) |
+| SMS / calls | ⏳ code done (+ **fast-fail** when unregistered); **signal-gated** (modem must register — needs better signal/antenna) |
+| LTE band-lock | ⏳ feature built (API + Network-tab UI, lock B1/B3/B5/B8/B40 or Auto); needs on-device probe of the band AT command → set `platform.band_at` |
 | Cellular data | ⏳ attaches but unusable at current location — **band mismatch** (B20 only); needs B1/B3 or antenna |
 | Tailscale / AdGuard | ⏳ installed, dormant (need working WAN + config) |
 | Voice audio bridge | ⏳ off; needs one-time tinymix spike during a registered call |

@@ -68,6 +68,35 @@ def earfcn_to_band(earfcn):
     return (None, None)
 
 
+# LTE E-UTRA bands this UZ801 hardware supports (FDD B1/B3/B5/B8 + TDD B40).
+# In the Qualcomm LTE band bitmask, E-UTRA band N occupies bit (N-1).
+LTE_BANDS_SUPPORTED = ["B1", "B3", "B5", "B8", "B40"]
+
+
+def _band_num(label):
+    """'B3' / 'b3' / '3' -> 3 ; anything else -> None."""
+    m = re.match(r"[Bb]?(\d+)$", str(label).strip())
+    return int(m.group(1)) if m else None
+
+
+def lte_band_mask(bands):
+    """Build the Qualcomm LTE band bitmask (E-UTRA band N -> bit N-1).
+
+    ``bands``: 'auto'/None/empty -> all supported bands; a single label
+    ('B3'); or a list (['B1','B3']). Returns an int bitmask.
+    """
+    if not bands or (isinstance(bands, str) and bands.strip().lower() == "auto"):
+        bands = LTE_BANDS_SUPPORTED
+    if isinstance(bands, str):
+        bands = [bands]
+    mask = 0
+    for b in bands:
+        n = _band_num(b)
+        if n:
+            mask |= 1 << (n - 1)
+    return mask
+
+
 # Bands that this UZ801 hardware (with its tiny internal antenna) can camp on
 # but cannot sustain a usable link on. B20 (800 MHz) is the well-known antenna
 # mismatch on this board; B7 (2600 MHz) is similarly unusable here.
@@ -545,13 +574,31 @@ class ModemControl:
     def sms_delete(self, index):
         return self.at("AT+CMGD=%d" % index)
 
-    def sms_send(self, number, text):
+    def sms_send(self, number, text, require_registration=True):
         """Send an SMS in PDU mode, splitting long/unicode bodies as needed.
 
-        Returns a dict {ok, references:[...], parts:n, error:None|str}.
+        Returns a dict {ok, references:[...], parts:n, error:None|str,
+        registered:bool}.
         The CMGS prompt protocol: send ``AT+CMGS=<len>``, wait for ``>``, send
         the PDU hex followed by Ctrl-Z (0x1A).
+
+        Fast-fail: an SMS can only leave the device once the modem is
+        registered on a network. On this board that is signal/band-gated (the
+        local strong cell is B20, which the antenna can't use), so an
+        unregistered send would otherwise crawl through the whole CMGS prompt
+        protocol and only then return a cryptic ``+CMS ERROR: 500`` tens of
+        seconds later. When ``require_registration`` is set we check
+        registration first and reject immediately with a human-readable reason.
         """
+        if require_registration:
+            reg = self.registration()
+            if not reg.get("registered"):
+                state = reg.get("state") or "not registered"
+                return {"ok": False, "references": [], "parts": 0,
+                        "registered": False,
+                        "error": "modem not registered (%s) - cannot send "
+                                 "SMS; the network link is signal/band-gated "
+                                 "on this hardware" % state}
         self.at("AT+CMGF=0")
         import secrets as _secrets
         ref_base = _secrets.randbelow(256)
@@ -563,13 +610,14 @@ class ModemControl:
             res = self._send_pdu(tpdu_len, pdu)
             if not res.ok:
                 return {"ok": False, "references": references,
-                        "parts": len(pdus), "error": res.status}
+                        "parts": len(pdus), "registered": True,
+                        "error": res.status}
             for line in res.lines:
                 m = re.search(r"\+CMGS:\s*(\d+)", line)
                 if m:
                     references.append(int(m.group(1)))
         return {"ok": True, "references": references, "parts": len(pdus),
-                "error": None}
+                "registered": True, "error": None}
 
     def _send_pdu(self, tpdu_len, pdu):
         """Perform the AT+CMGS prompt exchange for one PDU."""
@@ -583,8 +631,17 @@ class ModemControl:
             transport._ensure_open()
             transport._drain()
             os.write(transport._fd, ("AT+CMGS=%d\r" % tpdu_len).encode())
-            # Wait briefly for the '>' prompt.
-            _wait_for_prompt(transport._fd, timeout=5)
+            # Wait briefly for the '>' prompt. If it never arrives (e.g. the
+            # modem rejected the CMGS outright), do NOT write the payload and
+            # block for the full 30s window: abort the pending command with an
+            # ESC (0x1B) and fail fast.
+            if not _wait_for_prompt(transport._fd, timeout=5):
+                try:
+                    os.write(transport._fd, b"\x1b")
+                except OSError:
+                    pass
+                return AtResult("AT+CMGS", [], "TIMEOUT: no '>' prompt",
+                                timed_out=True)
             os.write(transport._fd, (pdu + "\x1a").encode())
             return transport._read_until_final("AT+CMGS", timeout=30)
 
@@ -676,6 +733,65 @@ class ModemControl:
         if not cmd:
             return None
         return self.at(cmd, timeout=15)
+
+    # --- band lock -----------------------------------------------------------
+    # Locking the LTE radio to specific band(s) is how you stop this dongle
+    # from wasting time camping on the strong-but-unusable B20 (800 MHz) cell
+    # and force it onto a band its antenna can actually use (B1/B3/B8). The
+    # exact AT command is Qualcomm-modem-specific and UNVERIFIED on this board,
+    # so it is fully config-driven (``band_at`` templates) - mirroring how
+    # ``set_net_mode`` handles the same modem-specific-command problem. Nothing
+    # is written to the modem unless a template is configured.
+    #
+    # ``templates`` (from config ``platform.band_at``) may contain:
+    #   "set":   a template with a ``{mask}`` (decimal) or ``{mask_hex}`` (no
+    #            0x prefix) or ``{mask_hex0x}`` placeholder, e.g.
+    #            "AT$QCBANDPREF=0x{mask_hex}" - used for any band selection.
+    #   "<BAND>": an exact command for a specific single band (e.g. "B3"),
+    #            overriding the "set" template for that selection.
+    #   "auto":  an exact command to restore all bands.
+    #   "query": the read-back command (e.g. "AT$QCBANDPREF?"); optional.
+    def band_lock(self, bands, templates=None):
+        """Lock LTE to ``bands`` (label, list, or 'auto'). Returns a dict.
+
+        {ok, bands, mask, mask_hex, command, status, source}. ``source`` is
+        'at' when a command was issued, or 'unconfigured' when no band_at
+        template exists for this modem (nothing written).
+        """
+        mask = lte_band_mask(bands)
+        mask_hex = format(mask, "x")
+        sel = "auto" if (not bands or str(bands).strip().lower() == "auto") \
+            else (bands if isinstance(bands, str) else ",".join(bands))
+        out = {"ok": False, "bands": sel, "mask": mask, "mask_hex": mask_hex,
+               "command": None, "status": None, "source": "unconfigured"}
+        if not templates:
+            return out
+        # Prefer an exact per-selection template, then "auto", then "set".
+        cmd = None
+        key = sel if isinstance(sel, str) else None
+        if key and key in templates:
+            cmd = templates[key]
+        elif sel == "auto" and "auto" in templates:
+            cmd = templates["auto"]
+        elif "set" in templates:
+            cmd = templates["set"].format(
+                mask=mask, mask_hex=mask_hex, mask_hex0x="0x" + mask_hex)
+        if not cmd:
+            return out
+        res = self.at(cmd, timeout=15)
+        out.update(ok=res.ok, command=cmd, status=res.status, source="at")
+        return out
+
+    def band_status(self, templates=None):
+        """Read the modem's current band preference, if a query template is
+        configured. Returns {supported, raw, source}."""
+        out = {"supported": list(LTE_BANDS_SUPPORTED), "raw": None,
+               "source": "unconfigured"}
+        if templates and templates.get("query"):
+            res = self.at(templates["query"])
+            out["raw"] = res.raw
+            out["source"] = "at"
+        return out
 
 
 # ===========================================================================

@@ -143,6 +143,8 @@ Same-origin WS (`wss:` under HTTPS). Contract:
 | `GET /api/network/apn` | — | `{ apn, user, pwd, auth }` |
 | `POST /api/network/apn` | `{ apn, user, pwd, auth }` | save profile |
 | `POST /api/network/netmode` | `{ mode }` | `mode` ∈ `auto \| 4g \| 3g \| 2g` |
+| `GET /api/band` | — | `{ supported[], serving{band,usable,hint}, cells[], configured, current }` |
+| `POST /api/band` | `{ bands }` | `bands` = `auto` \| a label (`B3`) \| a list (`["B1","B3"]`); 501 if `platform.band_at` unset |
 
 Registration/band info for this tab comes from `GET /api/status` (mirrored).
 

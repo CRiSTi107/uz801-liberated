@@ -70,6 +70,11 @@ DEFAULT_CONFIG = {
         # commands for this board go here; empty => fall back to stock 1005.
         # Example once verified: {"auto": "AT$QCSYSMODE=...", "4g": "..."}.
         "netmode_at": {},
+        # AT command(s) to lock the LTE radio to specific band(s). Qualcomm-
+        # modem-specific and unverified on this board => empty by default
+        # (nothing is written). See config.example.json 'band_at' and modem.py
+        # band_lock() for the template placeholders ({mask}/{mask_hex}).
+        "band_at": {},
     },
     # Static SPA served at the web root (same origin as /api). Defaults to the
     # sibling cockpit/web/ directory for local dev; set explicitly on device.
@@ -148,6 +153,7 @@ class App:
         self.platform = platformmod.build_platform(plat_cfg, mock=mock)
         self.prefer_direct = plat_cfg.get("prefer_direct", True)
         self._netmode_at = plat_cfg.get("netmode_at", {})
+        self._band_at = plat_cfg.get("band_at", {})
         self._start_time = time.time()
         self._sms_poll_seconds = cfg.get("sms_poll_seconds", 20)
         self._stop = threading.Event()
@@ -774,6 +780,58 @@ class Handler(BaseHTTPRequestHandler):
         result = self.app.stock.forward({"funcNo": 1005, "net_mode": str(mode)})
         return {"ok": True, "stock": result, "source": "stock"}
 
+    # --- band lock ---------------------------------------------------------
+    def ep_band_get(self, query, args, session):
+        """Report supported bands, the live serving band, and the band-lock
+        config state (so the UI knows whether locking is wired for this modem).
+        """
+        m = self.app.modem
+        try:
+            sig = m.signal()
+        except Exception:  # noqa: BLE001
+            sig = {}
+        serving = sig.get("band")
+        usable, hint = modemmod.band_usable(serving)
+        status = m.band_status(self.app._band_at)
+        return {
+            "supported": modemmod.LTE_BANDS_SUPPORTED,
+            "serving": {
+                "band": serving,
+                "earfcn": sig.get("earfcn"),
+                "rsrp": sig.get("rsrp"),
+                "usable": usable,
+                "hint": hint,
+            },
+            # cells currently visible, each tagged usable/not, to guide choice
+            "cells": [
+                dict(c, usable=modemmod.band_usable(c.get("band"))[0])
+                for c in sig.get("cells", [])
+            ],
+            "configured": bool(self.app._band_at),
+            "current": status,
+        }
+
+    def ep_band_set(self, query, args, session):
+        """Lock LTE to band(s), or 'auto' for all supported bands.
+
+        Body: {"bands": "auto" | "B3" | ["B1","B3"]}.
+        """
+        body = self._read_json()
+        bands = body.get("bands")
+        if bands is None:
+            raise ApiError(400, "bands is required ('auto', a label, or a list)")
+        res = self.app.modem.band_lock(bands, self.app._band_at)
+        if res["source"] == "unconfigured":
+            raise ApiError(
+                501,
+                "band-lock AT command is not configured for this modem - set "
+                "platform.band_at in config.json (the exact command is "
+                "Qualcomm-modem-specific; see config.example.json). Requested "
+                "bands=%s mask=0x%s." % (res["bands"], res["mask_hex"]))
+        if not res["ok"]:
+            raise ApiError(502, "modem rejected band set: %s" % res["status"])
+        return res
+
     # --- SMS ---------------------------------------------------------------
     def ep_sms_list(self, query, args, session):
         box = (query.get("box") or ["inbox"])[0]
@@ -795,6 +853,10 @@ class Handler(BaseHTTPRequestHandler):
             modem_index=None, pdu=None, is_read=1,
         )
         if not result["ok"]:
+            # Not-registered is a precondition failure (the caller can't fix it
+            # by retrying) - distinguish it from a genuine modem/gateway error.
+            if result.get("registered") is False:
+                raise ApiError(409, result.get("error") or "modem not registered")
             raise ApiError(502, "send failed: %s" % result.get("error"))
         return {"id": str(row_id), "references": result["references"],
                 "parts": result["parts"]}
@@ -1078,6 +1140,8 @@ ROUTES = [
     ("GET",    r"/api/network/apn",      "ep_network_apn_get", True, False),
     ("POST",   r"/api/network/apn",      "ep_network_apn",    True,  True),
     ("POST",   r"/api/network/netmode",  "ep_network_netmode", True, True),
+    ("GET",    r"/api/band",             "ep_band_get",       True,  False),
+    ("POST",   r"/api/band",             "ep_band_set",       True,  True),
 
     ("GET",    r"/api/sms",              "ep_sms_list",       True,  False),
     ("POST",   r"/api/sms",              "ep_sms_send",       True,  True),

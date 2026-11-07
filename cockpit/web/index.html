@@ -366,6 +366,26 @@
             </select></label>
           <button class="btn" id="netmode-apply">Apply radio mode</button>
         </div>
+
+        <div class="card">
+          <h2>LTE band lock<span class="spacer"></span>
+            <button class="btn ghost small" id="band-read">Read current</button></h2>
+          <div class="hint mb8">This dongle can use <span class="mono">B1/B3/B5/B8/B40</span> only.
+            The strong local cell is often <span class="mono">B20 (800 MHz)</span>, which the
+            antenna <b>can't</b> use — locking to a usable band stops the modem camping on it.</div>
+          <div id="band-serving" class="hint mb8"></div>
+          <label class="field"><span>Lock to band</span>
+            <select id="band-sel">
+              <option value="auto">Auto (all supported bands)</option>
+              <option value="B1">B1 — 2100 MHz</option>
+              <option value="B3">B3 — 1800 MHz</option>
+              <option value="B5">B5 — 850 MHz</option>
+              <option value="B8">B8 — 900 MHz</option>
+              <option value="B40">B40 — 2300 MHz (TDD)</option>
+            </select></label>
+          <button class="btn" id="band-apply">Apply band lock</button>
+          <div id="band-note" class="hint mt8"></div>
+        </div>
       </div>
     </section>
 

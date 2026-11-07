@@ -337,7 +337,7 @@
       case "sms": loadSms(); break;
       case "calls": pollCall(); break;
       case "sim": loadIdentity(); break;
-      case "network": pollStatus(); if (initial) readApn(); break;
+      case "network": pollStatus(); readBand(); if (initial) readApn(); break;
       case "wifi": readWifi(); loadWifiClients(); break;
       case "system": loadSystem(); break;
       case "settings": loadTokens(); break;
@@ -652,6 +652,38 @@
     try { await act(api.post("/network/netmode", { mode: $("#netmode-sel").value }), "Radio mode applied"); }
     catch (e) { /* toast shown */ }
   });
+
+  /* ---- LTE band lock ---- */
+  $("#band-read").addEventListener("click", readBand);
+  $("#band-apply").addEventListener("click", async () => {
+    try {
+      await act(api.post("/band", { bands: $("#band-sel").value }), "Band lock applied");
+      readBand();
+    } catch (e) { /* toast shown (incl. 'not configured' guidance) */ }
+  });
+
+  async function readBand() {
+    try {
+      const b = await api.get("/band");
+      setOffline(false);
+      const sv = b.serving || {};
+      const cells = (b.cells || []).map(c =>
+        `${esc(c.band || "?")}${c.rsrp != null ? " " + c.rsrp + "dBm" : ""}` +
+        `${c.usable === false ? " (unusable)" : ""}`).join(", ");
+      $("#band-serving").innerHTML = sv.band
+        ? `Serving cell: <span class="mono">${esc(sv.band)}</span>` +
+          `${sv.rsrp != null ? " @ " + esc(String(sv.rsrp)) + " dBm" : ""}` +
+          `${sv.usable === false ? ' — <b class="bad">unusable on this hardware</b>' : ""}` +
+          `${cells ? `<br>Visible: ${esc(cells)}` : ""}`
+        : "No serving cell reported yet.";
+      $("#band-note").textContent = b.configured
+        ? "Band-lock command is configured for this modem."
+        : "Band-lock command is NOT configured for this modem yet — applying will " +
+          "return setup guidance until platform.band_at is set in config.json.";
+    } catch (err) {
+      if (err instanceof ApiError && err.offline) setOffline(true);
+    }
+  }
 
   /* ======================================================================
      WiFi

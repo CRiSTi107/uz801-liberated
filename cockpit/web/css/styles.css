@@ -378,6 +378,7 @@ td.mono { font-family: var(--mono); }
 .nowrap { white-space: nowrap; }
 .mt { margin-top: 16px; }
 .mt8 { margin-top: 8px; }
+.mb8 { margin-bottom: 8px; }
 
 /* ==========================================================================
    Cockpit-specific components
