@@ -10,6 +10,32 @@ Living log of day-to-day steps is in [`README.md`](README.md); deep docs are lin
 
 ---
 
+## ▶ RESUME HERE (last updated 2026-11-07)
+**State:** Clean checkpoint. Backdoor **decommissioned** (not deleted), cockpit (API+UI)
+deployed & auto-starting on boot, SSH + USB-ADB root lifelines working, everything committed
+& pushed (`origin` = private `uz801-liberated`). See §5 for the full status table.
+
+**The one blocker:** cellular **signal/band mismatch** (supported B1/B3 are weak, strong cell
+is unusable B20) → SMS/calls/data don't work yet. **Not software-fixable** — needs a directional
+**B1/B3 LTE antenna** (hardware; `ANTENNA.md` + `CAPABILITIES.md`). The cockpit's own features
+(WiFi/clients/traffic/SIM/signal reads) work regardless.
+
+**Next actions (pick up here):**
+1. *(hardware, owner)* Fit the directional antenna → modem registers → then I can verify/finish
+   **SMS send, voice call, and the voice audio-bridge spike** (tinymix routing during a live call),
+   and bring up **Tailscale/AdGuard** (need WAN).
+2. *(optional, low-risk software)* SMS fast-fail timeout; expose host `/system`+property area to the
+   chroot so cockpit WiFi-**write**/restart + `getprop` work directly (finishes self-sufficiency).
+3. *(gated — needs owner go-ahead + careful reboot test)* **Delete the stock app**: run
+   `cockpit/api/deploy/uz-netservices.sh` host-side to take over hostapd/dnsmasq/NAT/data, verify
+   WiFi/DHCP/data survive with the app `pm disable`d (USB-ADB lifeline), then remove the APK.
+
+To resume on another PC: `git pull`, read `CLAUDE.md` + this block, connect to the device
+(`adb -s 0123456789ABCDEF` / cockpit `https://192.168.100.1` / `ssh root@192.168.100.1`;
+creds in local `CREDENTIALS`).
+
+---
+
 ## 1. What this project did (high level)
 1. **Rooted** the dongle via its own stock backdoor (unauth web funcNo 2001 → ADB), one-time.
 2. **Dumped** all 25 firmware partitions (md5-verified) — see [`dump/`](dump/) (images gitignored; text records kept).
