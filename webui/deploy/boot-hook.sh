@@ -5,8 +5,10 @@
 LOG=/data/webui/boot-hook.log
 {
   echo "=== boot-hook $(date 2>/dev/null) ==="
-  /system/bin/sh /data/webui/start-webui.sh
+  # (decommissioned) old unauth :8088 shim no longer started — cockpit :443 replaces it
   /system/bin/sh /data/webui/harden.sh
+  # Alpine chroot services: SSH + cockpit API (+ tailscale/adguard when configured)
+  [ -f /data/linux/start-services.sh ] && /system/bin/sh /data/linux/start-services.sh
   echo "=== boot-hook done ==="
 } >> "$LOG" 2>&1
 exit 0

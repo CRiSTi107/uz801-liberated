@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>UZ801 Cockpit</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Inline SVG favicon so there is no external request. -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#128225;</text></svg>">
+</head>
+<body>
+
+<!-- ======================= Auth: Login screen ======================= -->
+<div id="login" class="auth-wrap" role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <div class="auth-card">
+    <div class="brand"><span class="dot" aria-hidden="true"></span><span>UZ801 Cockpit</span></div>
+    <h2 id="login-title">Sign in</h2>
+    <div class="sub">Authenticate to manage the dongle.</div>
+    <form id="login-form" autocomplete="on">
+      <label class="field">
+        <span>Username</span>
+        <input id="login-user" name="username" autocomplete="username" required placeholder="admin">
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="login-pass" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn block" id="login-submit">Sign in</button>
+      <div id="login-err" class="err-text" role="alert"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ======================= Auth: First-run setup ======================= -->
+<div id="setup" class="auth-wrap" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+  <div class="auth-card">
+    <div class="brand"><span class="dot" aria-hidden="true"></span><span>UZ801 Cockpit</span></div>
+    <h2 id="setup-title">Welcome - first-run setup</h2>
+    <div class="sub">No admin account exists yet. Create one to secure the cockpit.</div>
+    <form id="setup-form" autocomplete="off">
+      <label class="field">
+        <span>Admin username</span>
+        <input id="setup-user" name="username" value="admin" required>
+      </label>
+      <label class="field">
+        <span>New password (min 8 chars)</span>
+        <input id="setup-pass" name="password" type="password" minlength="8" required
+               autocomplete="new-password">
+      </label>
+      <label class="field">
+        <span>Confirm password</span>
+        <input id="setup-pass2" name="password2" type="password" minlength="8" required
+               autocomplete="new-password">
+      </label>
+      <button type="submit" class="btn block" id="setup-submit">Create account &amp; continue</button>
+      <div id="setup-err" class="err-text" role="alert"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================== App shell ============================== -->
+<div class="app" id="app" hidden>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="dot" id="conn-dot" title="Connection state"></span>
+      <span>UZ801 Cockpit</span>
+    </div>
+    <nav class="nav" id="nav" aria-label="Sections">
+      <button data-view="overview" class="active"><span class="ico" aria-hidden="true">&#9673;</span><span class="label-txt">Overview</span></button>
+      <button data-view="sms"><span class="ico" aria-hidden="true">&#9993;</span><span class="label-txt">SMS</span><span class="nav-badge" id="sms-badge">0</span></button>
+      <button data-view="calls"><span class="ico" aria-hidden="true">&#9742;</span><span class="label-txt">Calls</span></button>
+      <button data-view="sim"><span class="ico" aria-hidden="true">&#9873;</span><span class="label-txt">SIM / Identity</span></button>
+      <button data-view="network"><span class="ico" aria-hidden="true">&#9729;</span><span class="label-txt">Network / APN</span></button>
+      <button data-view="wifi"><span class="ico" aria-hidden="true">&#9775;</span><span class="label-txt">WiFi</span></button>
+      <button data-view="system"><span class="ico" aria-hidden="true">&#9881;</span><span class="label-txt">System</span></button>
+      <button data-view="settings"><span class="ico" aria-hidden="true">&#9965;</span><span class="label-txt">Settings</span></button>
+    </nav>
+    <div class="spacer"></div>
+    <div class="side-foot">
+      <div id="auth-state">Not signed in</div>
+      <div class="row">
+        <span class="mono" id="fw-foot">fw: --</span>
+        <button class="btn ghost small" id="logout-btn">Sign out</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="offline" role="status">
+      API unreachable. The cockpit cannot talk to the dongle right now.
+      Check your connection (LAN / Tailscale). Auto-refresh keeps retrying.
+    </div>
+
+    <!-- ========================= OVERVIEW ========================= -->
+    <section class="view active" id="view-overview" aria-label="Overview">
+      <div class="page-head">
+        <div>
+          <h1>Overview</h1>
+          <div class="sub">Live device status</div>
+        </div>
+        <div class="row">
+          <span class="badge live" id="link-badge" title="Link health"><span class="pulse"></span><span id="link-txt">link --</span></span>
+          <label class="switch"><input type="checkbox" id="pause-toggle"> Pause</label>
+          <button class="btn ghost small" id="refresh-now">Refresh now</button>
+        </div>
+      </div>
+
+      <div id="band-hint" class="warnbox" hidden></div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="label dim" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em">Signal</div>
+          <div class="row" style="align-items:center;gap:14px;margin-top:8px">
+            <div class="signal" id="o-signal" aria-hidden="true">
+              <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+              <span class="bar"></span><span class="bar"></span>
+            </div>
+            <div class="value" style="font-size:22px;font-weight:700">
+              <span id="o-rsrp">--</span> <span class="unit">dBm RSRP</span>
+            </div>
+          </div>
+          <div class="meter" id="o-meter"><span></span></div>
+          <div class="kv mt8" style="grid-template-columns:90px 1fr">
+            <dt>RSRQ</dt><dd id="o-rsrq">--</dd>
+            <dt>SINR</dt><dd id="o-sinr">--</dd>
+            <dt>CSQ</dt><dd id="o-csq">--</dd>
+          </div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Registration</div>
+          <div class="value" id="o-reg">--</div>
+          <div class="sub"><span id="o-operator">--</span> &middot; <span id="o-rat">--</span></div>
+          <div class="mt8"><span class="badge" id="o-reg-badge">unknown</span></div>
+        </div>
+
+        <div class="card">
+          <h2>Radio / cell</h2>
+          <dl class="kv">
+            <dt>Band</dt><dd id="o-band">--</dd>
+            <dt>EARFCN</dt><dd id="o-earfcn">--</dd>
+            <dt>PCI</dt><dd id="o-pci">--</dd>
+            <dt>Cell ID</dt><dd id="o-cell">--</dd>
+          </dl>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Data</div>
+          <div class="value"><span class="badge" id="o-data-badge">--</span></div>
+          <div class="sub mono" id="o-ip">IP --</div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Downloaded</div>
+          <div class="value" id="o-down">--</div>
+          <div class="sub">this session</div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Uploaded</div>
+          <div class="value" id="o-up">--</div>
+          <div class="sub">this session</div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Uptime</div>
+          <div class="value" id="o-uptime">--</div>
+        </div>
+
+        <div class="card stat">
+          <div class="label">Link health</div>
+          <div class="value"><span id="o-ping">--</span> <span class="unit">ms</span></div>
+          <div class="sub" id="o-ping-target">ping target --</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= SMS ========================= -->
+    <section class="view" id="view-sms" aria-label="SMS">
+      <div class="page-head">
+        <div><h1>SMS</h1><div class="sub">Read, send and manage text messages</div></div>
+        <div class="row">
+          <label class="switch"><input type="checkbox" id="sms-auto" checked> Auto-refresh</label>
+          <button class="btn ghost small" id="sms-refresh">Refresh</button>
+        </div>
+      </div>
+      <div class="grid wide">
+        <div class="card">
+          <div class="seg-tabs" role="tablist" aria-label="Message box">
+            <button data-box="inbox" class="active" role="tab" aria-selected="true">Inbox</button>
+            <button data-box="sent" role="tab" aria-selected="false">Sent</button>
+          </div>
+          <div id="sms-list" class="msg-list" aria-live="polite"></div>
+        </div>
+
+        <div class="card">
+          <h2>Compose</h2>
+          <form id="sms-form">
+            <label class="field"><span>To (phone number)</span>
+              <input id="sms-to" name="to" inputmode="tel" required
+                     placeholder="+40..." autocomplete="tel"></label>
+            <label class="field"><span>Message</span>
+              <textarea id="sms-text" name="text" rows="5" required
+                        placeholder="Type your message"></textarea></label>
+            <div class="seg-counter">
+              <span id="sms-chars">0 chars</span>
+              <span id="sms-segs">1 segment &middot; GSM-7</span>
+            </div>
+            <button type="submit" class="btn block mt" id="sms-send">Send</button>
+          </form>
+          <div class="hint mt8">Long messages are split into multiple segments and billed per segment.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= CALLS ========================= -->
+    <section class="view" id="view-calls" aria-label="Calls">
+      <div class="page-head"><div><h1>Calls</h1>
+        <div class="sub">Dial, answer and hang up &middot; live call state</div></div></div>
+      <div class="grid wide">
+        <div class="card">
+          <h2>Dialer</h2>
+          <div class="call-state" id="call-state">
+            <div class="num" id="call-num">No active call</div>
+            <div class="st" id="call-st">Idle</div>
+            <div class="timer" id="call-timer" hidden>00:00</div>
+          </div>
+          <input class="dial-display" id="dial-input" inputmode="tel"
+                 placeholder="Enter number" aria-label="Phone number">
+          <div class="dialpad" id="dialpad" role="group" aria-label="Dial pad">
+            <button data-k="1">1<span class="sub">&nbsp;</span></button>
+            <button data-k="2">2<span class="sub">ABC</span></button>
+            <button data-k="3">3<span class="sub">DEF</span></button>
+            <button data-k="4">4<span class="sub">GHI</span></button>
+            <button data-k="5">5<span class="sub">JKL</span></button>
+            <button data-k="6">6<span class="sub">MNO</span></button>
+            <button data-k="7">7<span class="sub">PQRS</span></button>
+            <button data-k="8">8<span class="sub">TUV</span></button>
+            <button data-k="9">9<span class="sub">WXYZ</span></button>
+            <button data-k="*">*<span class="sub">&nbsp;</span></button>
+            <button data-k="0">0<span class="sub">+</span></button>
+            <button data-k="#">#<span class="sub">&nbsp;</span></button>
+          </div>
+          <div class="call-actions">
+            <button class="btn ghost" id="dial-back" aria-label="Backspace">&#9003;</button>
+            <button class="btn ok" id="call-dial">Call</button>
+            <button class="btn" id="call-answer" disabled>Answer</button>
+            <button class="btn danger" id="call-hangup" disabled>Hang up</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Audio bridge <span class="beta-pill">beta</span></h2>
+          <div class="warnbox info">
+            Experimental 2-way voice over the browser. Plays the far-end audio through your
+            speakers and sends your microphone as the "virtual mic". Requires the audio
+            WebSocket on the API and a mic-equipped device. Degrades gracefully if unavailable.
+          </div>
+          <div class="row between">
+            <span class="badge" id="audio-badge">disconnected</span>
+            <span class="mono dim" id="audio-rate">-- Hz</span>
+          </div>
+          <div class="mt8">
+            <div class="hint">Speaker (far end)</div>
+            <div class="vu"><span id="vu-rx"></span></div>
+          </div>
+          <div class="mt8">
+            <div class="hint">Microphone (virtual mic)</div>
+            <div class="vu"><span id="vu-tx"></span></div>
+          </div>
+          <div class="audio-stats">
+            <span>RX frames: <b id="a-rx">0</b></span>
+            <span>TX frames: <b id="a-tx">0</b></span>
+          </div>
+          <div class="row mt">
+            <button class="btn" id="audio-connect">Connect</button>
+            <button class="btn ghost" id="audio-disconnect" disabled>Disconnect</button>
+            <label class="switch"><input type="checkbox" id="audio-mute-mic"> Mute mic</label>
+          </div>
+          <div class="hint mt8" id="audio-msg"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= SIM / IDENTITY ========================= -->
+    <section class="view" id="view-sim" aria-label="SIM and Identity">
+      <div class="page-head"><div><h1>SIM / Identity</h1>
+        <div class="sub">Modem IMEI and SIM identifiers</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>Identity<span class="spacer"></span>
+            <button class="btn ghost small" id="sim-refresh">Refresh</button></h2>
+          <dl class="kv">
+            <dt>IMEI</dt><dd id="id-imei">--</dd>
+            <dt>IMSI</dt><dd id="id-imsi">--</dd>
+            <dt>ICCID</dt><dd id="id-iccid">--</dd>
+            <dt>SIM status</dt><dd id="id-sim">--</dd>
+            <dt>Phone number</dt><dd id="id-msisdn">--</dd>
+          </dl>
+          <div class="hint mt8">IMSI and ICCID live on the SIM and cannot be changed on the device.</div>
+        </div>
+
+        <div class="card">
+          <h2>Change IMEI</h2>
+          <div class="warnbox danger">
+            <b>Danger.</b> Writing the modem IMEI may be <b>illegal in your jurisdiction</b>
+            and can break network registration. A reboot is usually required. Use only on
+            your own hardware.
+          </div>
+          <label class="field"><span>New IMEI (15 digits)</span>
+            <input id="imei-new" class="mono" inputmode="numeric" maxlength="15"
+                   placeholder="8600180460XXXXX"></label>
+          <div class="hint" id="imei-check"></div>
+          <button class="btn danger mt" id="imei-write">Write IMEI</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= NETWORK / APN ========================= -->
+    <section class="view" id="view-network" aria-label="Network and APN">
+      <div class="page-head"><div><h1>Network / APN</h1>
+        <div class="sub">Registration, band, data profile and radio mode</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>Registration</h2>
+          <dl class="kv">
+            <dt>State</dt><dd id="net-state">--</dd>
+            <dt>Operator</dt><dd id="net-oper">--</dd>
+            <dt>RAT</dt><dd id="net-rat">--</dd>
+            <dt>Band</dt><dd id="net-band">--</dd>
+            <dt>EARFCN</dt><dd id="net-earfcn">--</dd>
+          </dl>
+        </div>
+
+        <div class="card">
+          <h2>APN profile<span class="spacer"></span>
+            <button class="btn ghost small" id="apn-read">Read</button></h2>
+          <form id="apn-form">
+            <label class="field"><span>APN</span>
+              <input name="apn" placeholder="internet"></label>
+            <label class="field"><span>Username</span>
+              <input name="user" autocomplete="off"></label>
+            <label class="field"><span>Password</span>
+              <input name="pwd" type="password" autocomplete="off"></label>
+            <label class="field"><span>Auth type</span>
+              <select name="auth">
+                <option value="none">None</option>
+                <option value="pap">PAP</option>
+                <option value="chap">CHAP</option>
+                <option value="papchap">PAP/CHAP</option>
+              </select></label>
+            <button type="submit" class="btn">Save APN</button>
+          </form>
+          <div class="hint mt8">Digi Romania APN is <span class="mono">internet</span>.</div>
+        </div>
+
+        <div class="card">
+          <h2>Radio mode</h2>
+          <label class="field"><span>Preferred network</span>
+            <select id="netmode-sel">
+              <option value="auto">Auto (2G/3G/4G)</option>
+              <option value="4g">4G only</option>
+              <option value="3g">3G only</option>
+              <option value="2g">2G only</option>
+            </select></label>
+          <button class="btn" id="netmode-apply">Apply radio mode</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= WIFI ========================= -->
+    <section class="view" id="view-wifi" aria-label="WiFi">
+      <div class="page-head"><div><h1>WiFi</h1>
+        <div class="sub">Hotspot settings and connected clients</div></div></div>
+      <div class="grid wide">
+        <div class="card">
+          <h2>Hotspot<span class="spacer"></span>
+            <button class="btn ghost small" id="wifi-read">Read current</button></h2>
+          <form id="wifi-form">
+            <label class="field"><span>SSID (4-32 chars)</span>
+              <input name="ssid" minlength="4" maxlength="32" placeholder="4G-UFI"></label>
+            <label class="field"><span>Password (8-63 chars)</span>
+              <input name="password" minlength="8" maxlength="63"></label>
+            <label class="field"><span>Encryption</span>
+              <select name="encryption">
+                <option value="open">None (open)</option>
+                <option value="wpa2">WPA2 Personal</option>
+                <option value="wpa2wpa3">WPA2/WPA3</option>
+                <option value="wpa3">WPA3 Personal</option>
+              </select></label>
+            <label class="field"><span>Max clients</span>
+              <input name="max_clients" type="number" min="1" max="16" value="10"></label>
+            <button type="submit" class="btn">Save WiFi</button>
+          </form>
+          <div class="warnbox mt">Saving reconfigures the hotspot; connected clients will drop and must reconnect.</div>
+        </div>
+
+        <div class="card">
+          <h2>Connected clients<span class="spacer"></span>
+            <button class="btn ghost small" id="wifi-clients-refresh">Refresh</button></h2>
+          <div id="wifi-clients"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= SYSTEM ========================= -->
+    <section class="view" id="view-system" aria-label="System">
+      <div class="page-head"><div><h1>System</h1>
+        <div class="sub">Services, firewall, remote access and power</div></div>
+        <button class="btn ghost small" id="system-refresh">Refresh</button></div>
+      <div class="grid">
+        <div class="card stat">
+          <div class="label">Firewall</div>
+          <div class="value"><span class="badge" id="sys-firewall">--</span></div>
+          <div class="sub" id="sys-firewall-sub">--</div>
+        </div>
+        <div class="card stat">
+          <div class="label">Tailscale</div>
+          <div class="value"><span class="badge" id="sys-tailscale">--</span></div>
+          <div class="sub mono" id="sys-tailscale-sub">--</div>
+        </div>
+        <div class="card stat">
+          <div class="label">AdGuard</div>
+          <div class="value"><span class="badge" id="sys-adguard">--</span></div>
+          <div class="sub" id="sys-adguard-sub">--</div>
+        </div>
+
+        <div class="card span-2">
+          <h2>Services</h2>
+          <div id="sys-services"></div>
+        </div>
+
+        <div class="card">
+          <h2>Power</h2>
+          <div class="warnbox">Rebooting drops all connections for ~30s.</div>
+          <button class="btn danger" id="sys-reboot">Reboot device</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= SETTINGS ========================= -->
+    <section class="view" id="view-settings" aria-label="Settings">
+      <div class="page-head"><div><h1>Settings</h1>
+        <div class="sub">Account, tokens and UI preferences</div></div></div>
+      <div class="grid">
+        <div class="card">
+          <h2>Change admin password</h2>
+          <form id="pw-form">
+            <label class="field"><span>Current password</span>
+              <input name="current" type="password" required autocomplete="current-password"></label>
+            <label class="field"><span>New password (min 8)</span>
+              <input name="new" type="password" minlength="8" required autocomplete="new-password"></label>
+            <label class="field"><span>Confirm new password</span>
+              <input name="new2" type="password" minlength="8" required autocomplete="new-password"></label>
+            <button type="submit" class="btn">Update password</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>API tokens<span class="spacer"></span>
+            <button class="btn ghost small" id="tokens-refresh">Refresh</button></h2>
+          <p class="hint">Tokens let scripts authenticate without a password. Treat them like passwords.</p>
+          <div id="tokens-list"></div>
+          <form id="token-form" class="row mt">
+            <input id="token-name" placeholder="Token name (e.g. backup-script)" style="flex:1;min-width:160px">
+            <button type="submit" class="btn">Create</button>
+          </form>
+          <div id="token-reveal" class="token-reveal" hidden></div>
+        </div>
+
+        <div class="card">
+          <h2>Auto-refresh</h2>
+          <label class="field"><span>Status poll interval (seconds)</span>
+            <input id="set-interval" type="number" min="1" max="60" value="3"></label>
+          <button class="btn" id="set-save">Save</button>
+        </div>
+
+        <div class="card">
+          <h2>About</h2>
+          <p class="muted">UZ801 Cockpit - a modern, self-contained dashboard for the
+            UZ801 4G USB dongle (Qualcomm MSM8916). Served by the on-device secure API
+            over HTTPS. No external dependencies; everything runs locally.</p>
+          <dl class="kv mt8">
+            <dt>Session user</dt><dd id="about-user">--</dd>
+            <dt>API</dt><dd>same-origin /api</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Confirm dialog for destructive actions -->
+<dialog class="modal" id="confirm-modal">
+  <div class="m-body">
+    <h3 id="confirm-title">Are you sure?</h3>
+    <p id="confirm-text"></p>
+  </div>
+  <div class="m-foot">
+    <button class="btn ghost" id="confirm-cancel">Cancel</button>
+    <button class="btn danger" id="confirm-ok">Confirm</button>
+  </div>
+</dialog>
+
+<div id="toast-wrap" aria-live="polite"></div>
+
+<script src="js/api.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# cockpit-api dependencies
+# =========================
+#
+# ZERO third-party Python packages are required. The service uses only the
+# Python 3 standard library:
+#   http.server, ssl, sqlite3, json, hashlib, hmac, base64, secrets,
+#   subprocess, threading, urllib, socket, struct, select, os, re, time.
+#
+# This keeps it musl-safe on Alpine armhf: nothing to compile, no C/Rust
+# extensions (no cryptography, no pydantic/FastAPI, no uvloop).
+#
+# System packages needed on the device (NOT pip):
+#   apk add python3 openssl
+#     - python3 : the runtime.
+#     - openssl : CLI used ONCE at first run to generate the self-signed TLS
+#                 cert (cryptography is banned on musl, so we shell out).
+#   (optional) tinyalsa  : for the voice audio bridge (tinycap/tinyplay/tinymix).
+#
+# OPTIONAL pure-Python packages (only if you prefer a library WS server over the
+# built-in stdlib RFC6455 implementation in wsframe.py). Both are pure-Python
+# and musl-safe. The service does NOT import them by default.
+#
+# websockets==12.0        ; pure-Python, no C extensions (musl-safe)
+# simple-websocket==1.0.0 ; pure-Python, depends on wsproto (pure-Python)

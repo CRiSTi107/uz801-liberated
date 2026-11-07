@@ -1,0 +1,92 @@
+{
+  "_comment": "cockpit-api configuration. Copy to config.json and edit. All keys are optional; omitted keys fall back to the built-in defaults in server.py (DEFAULT_CONFIG). Paths below assume the Alpine chroot layout from CHROOT-LINUX-PLAN.md (/data/linux/...).",
+
+  "host": "0.0.0.0",
+  "port": 443,
+
+  "db_path": "/data/linux/cockpit/cockpit.db",
+
+  "tls": {
+    "_comment": "Self-signed cert is generated on first run via the openssl CLI (apk add openssl). Drop in your own cert/key and set auto_generate:false to use them instead.",
+    "enabled": true,
+    "cert": "/data/linux/cockpit/certs/cockpit.crt",
+    "key": "/data/linux/cockpit/certs/cockpit.key",
+    "openssl": "openssl",
+    "auto_generate": true,
+    "cn": "uz801.local",
+    "san": "IP:192.168.100.1,DNS:uz801.local",
+    "days": 3650
+  },
+
+  "modem": {
+    "_comment": "AT channel. On the device this is /dev/smd11 (mode 0666). Point 'device' at a file/FIFO for offline tests, or set mock:true (or pass --mock) to use the fake modem.",
+    "device": "/dev/smd11",
+    "timeout": 8.0,
+    "mock": false
+  },
+
+  "stock_api": {
+    "_comment": "The stock unauthenticated MiFi web API. Only allow-listed funcNos are ever forwarded (see stockproxy.py). With platform.prefer_direct:true this is only a FALLBACK - the cockpit reads the real system directly (uzplatform.py) so the stock app can be deleted.",
+    "base_url": "http://127.0.0.1:80",
+    "timeout": 15
+  },
+
+  "platform": {
+    "_comment": "DIRECT system access (uzplatform.py) replacing the stock :80 /ajax backdoor. When prefer_direct is true, WiFi/clients/MAC-filter/traffic/IP/DNS/device-info/netmode are read/written straight from the device (hostapd.conf, dnsmasq.leases, /proc, ioctl, getprop, AT) and the stock proxy is used only if a direct call fails. Set prefer_direct:false to revert to the old stock-proxy behaviour.",
+    "prefer_direct": true,
+    "wan_iface": "rmnet0",
+    "lan_iface": "br0",
+    "hostapd_conf": "/data/misc/wifi/hostapd.conf",
+    "hostapd_bin": "/system/bin/hostapd",
+    "hostapd_entropy": "/data/misc/wifi/entropy.bin",
+    "dnsmasq_leases": "/data/misc/dhcp/dnsmasq.leases",
+    "getprop_bin": "/system/bin/getprop",
+    "accept_mac_file": "/data/misc/wifi/hostapd.accept",
+    "deny_mac_file": "/data/misc/wifi/hostapd.deny",
+    "netmode_at": {
+      "_comment": "Per-mode AT command to set the preferred RAT (net mode). This modem's exact mode-select command is unverified; leave empty to fall back to stock funcNo 1005 for SET (GET is always direct from the modem RAT). Fill in once verified on-device, e.g. {\"auto\":\"AT...\",\"4g\":\"AT...\"}."
+    }
+  },
+
+  "security": {
+    "session_ttl": 86400,
+    "login_rate_max": 5,
+    "login_rate_window": 300,
+    "hsts": true,
+    "admin_user": "admin"
+  },
+
+  "sms_poll_seconds": 20,
+
+  "audio": {
+    "_comment": "Voice audio bridge (virtual mic/speaker over IP). Off by default; auto-disables if tinyalsa/devices are absent. Runs on its own port. See audiobridge.py CONFIG constants for the tinyalsa device indices + tinymix routes to fill in during the hardware spike.",
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 8089
+  },
+
+  "system": {
+    "_comment": "Allow-listed system controls. Only services named here can be controlled via /api/system/service. Adjust commands to your chroot init (OpenRC rc-service shown).",
+    "reboot_cmd": ["reboot"],
+    "firewall_cmd": ["iptables", "-S"],
+    "tailscale_status_cmd": ["tailscale", "status", "--json"],
+    "adguard_check": { "port": 3000 },
+    "services": {
+      "tailscale": {
+        "start": ["tailscale", "up"],
+        "stop": ["tailscale", "down"],
+        "status": ["tailscale", "status"]
+      },
+      "adguard": {
+        "start": ["rc-service", "adguardhome", "start"],
+        "stop": ["rc-service", "adguardhome", "stop"],
+        "status": ["rc-service", "adguardhome", "status"]
+      }
+    }
+  },
+
+  "log": {
+    "level": "INFO",
+    "file": null
+  }
+}

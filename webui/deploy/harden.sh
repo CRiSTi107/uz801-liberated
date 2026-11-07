@@ -8,10 +8,9 @@
 # Network adb (7628) is already closed via persisted persist.adb.tcp.port=-1;
 # we also firewall 7628 as defense-in-depth so it can't be re-opened remotely.
 #
-# What it does NOT do: it does not restrict LAN admin (ports 80/8088), because
-# the chosen policy keeps the WiFi hotspot usable for administration. LAN
-# access is gated by the WPA2 WiFi password instead. (/ajax remains
-# unauthenticated by the stock firmware — residual risk, documented.)
+# The stock unauth API (:80) and old shim (:8088) are confined to localhost so
+# the Chinese backdoor is not reachable from WiFi/USB/cellular; the authenticated
+# cockpit (:443) is the only exposed admin interface and proxies :80 over lo.
 #
 # Revert with unharden.sh.
 # ======================================================================
@@ -28,6 +27,12 @@ iptables -A UZSEC -m state --state ESTABLISHED,RELATED -j RETURN
 iptables -A UZSEC -i rmnet0 -j DROP
 # Network adb: never allow new inbound to 7628 from anywhere but loopback.
 iptables -A UZSEC -p tcp --dport 7628 -j DROP
+# DECOMMISSION the Chinese backdoor: the stock unauth API (:80) and the old
+# unauth shim (:8088) are now reachable ONLY from localhost (the authenticated
+# cockpit on :443 proxies to :80 via lo, which RETURNs above). WiFi/USB/cellular
+# clients can no longer reach the unauthenticated API at all.
+iptables -A UZSEC -p tcp --dport 80   -j DROP
+iptables -A UZSEC -p tcp --dport 8088 -j DROP
 
 # Phone-home / server-controlled remote-flash channel (outbound).
 iptables -C OUTPUT -d $PHONEHOME -j DROP 2>/dev/null || iptables -A OUTPUT -d $PHONEHOME -j DROP

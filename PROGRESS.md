@@ -1,0 +1,91 @@
+# UZ801 4G Dongle — Project Progress & State
+
+Consolidated status of the reverse-engineering, security, and custom-firmware
+work on a **UZ801 4G USB/WiFi dongle** (Qualcomm MSM8916, Android 4.4.4).
+Living log of day-to-day steps is in [`README.md`](README.md); deep docs are linked below.
+
+> **Credentials are NOT stored in this repo.** The SSH-root and cockpit-admin
+> passwords were generated at deploy time and handed to the owner out-of-band.
+> Change them anytime (SSH: `passwd`; cockpit: Settings tab).
+
+---
+
+## 1. What this project did (high level)
+1. **Rooted** the dongle via its own stock backdoor (unauth web funcNo 2001 → ADB), one-time.
+2. **Dumped** all 25 firmware partitions (md5-verified) — see [`dump/`](dump/) (images gitignored; text records kept).
+3. **Security-audited** the firmware (two passes) — [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md), [`EXPLOITS.md`](EXPLOITS.md), [`IP-INVESTIGATION.md`](IP-INVESTIGATION.md).
+4. **Hardened** it (closed remote ADB, cellular-WAN inbound, phone-home) while keeping USB-ADB root.
+5. Built a **new authenticated "cockpit"** (API + dashboard) to replace the insecure stock web UI.
+6. Stood up an **Alpine Linux chroot** on the device (python/ssh/tailscale/adguard + the cockpit).
+7. **Decommissioned the Chinese backdoor** (unauth `:80`/OTA walled off) — app still present, not yet deleted.
+8. Diagnosed the SIM/data: works, but **signal-gated by a band mismatch** (hardware) — see [`CAPABILITIES.md`](CAPABILITIES.md), [`ANTENNA.md`](ANTENNA.md).
+
+## 2. Hardware (summary; full detail in [`SPECS.md`](SPECS.md))
+MSM8916 (Snapdragon 410-class), 2×Cortex-A53 ≤1.19 GHz, Adreno 306, ~388 MB usable RAM,
+~4 GB eMMC, Android 4.4.4 / kernel 3.10, LTE **FDD B1/B3/B5/B8 + TDD B40** (no B20/B7),
+WCN3620 WiFi/BT, USB **gadget-only** (no host/OTG). IMEI/IMSI/ICCID readable; SMS supported.
+
+## 3. On-device architecture (current)
+```
+Android 4.4.4 (host)
+├─ init → adbd (USB, ROOT; TCP 7628 disabled)         ← our root lifeline over USB
+├─ MifiService.apk  :80  stock unauth API  ← DECOMMISSIONED (localhost-only via firewall)
+├─ netd → hostapd (WiFi AP) + dnsmasq (DHCP) + NAT(rmnet0)   ← stock plumbing (kept for now)
+├─ initmifiservice.sh (boot) → br0=192.168.100.1, chmod 666 /dev/smd11   ← essential, keep
+├─ firewall (UZSEC) : drop rmnet0-inbound, 7628, :80/:8088 (LAN), block phone-home
+└─ /data/linux  = Alpine armv7 chroot
+     ├─ sshd            :22    ← root SSH lifeline (independent of stock app)
+     ├─ cockpit API     :443   HTTPS, auth+TLS+CSRF, serves the SPA
+     │     ├─ modem via /dev/smd11 (AT): signal, SIM, SMS, call, APN
+     │     ├─ direct reads: WiFi(hostapd.conf), clients(leases+arp), traffic(/proc/net/dev)
+     │     └─ stock :80 proxy = fallback only (allow-listed; blocks 2000/2001/3000)
+     ├─ tailscale / adguardhome  (installed; dormant until WAN + config)
+     └─ (audio bridge off; needs tinymix spike + a registered call)
+```
+All services **auto-start on boot** via `/system/etc/init.qcom.post_boot.sh` → `/data/webui/boot-hook.sh` → `harden.sh` + `/data/linux/start-services.sh` (reboot-verified).
+
+## 4. Access
+- **Cockpit:** `https://192.168.100.1/` (self-signed cert) — admin login (creds out-of-band).
+- **SSH root:** `ssh -o PubkeyAuthentication=no root@192.168.100.1` (creds out-of-band).
+- **USB ADB root:** always available over the USB cable (the ultimate lifeline).
+- Reachable on the WiFi/USB LAN only; cellular (`rmnet0`) inbound is firewalled off.
+
+## 5. Status
+| Area | State |
+|------|-------|
+| Firmware dump | ✅ complete (`dump/`) |
+| Security audit | ✅ complete (2 passes) |
+| Hardening | ✅ applied + persistent (remote ADB closed, WAN-inbound dropped, phone-home blocked, WiFi pw rotated) |
+| Backdoor decommission | ✅ `:80`/`:8088` LAN-unreachable, OTA blocked (app not deleted) |
+| Cockpit API + dashboard | ✅ deployed, authenticated, boots automatically |
+| Direct (no-:80) reads | ✅ WiFi/clients/traffic/SIM/signal/device |
+| SMS / calls | ⏳ code done; **signal-gated** (modem must register — needs better signal/antenna) |
+| Cellular data | ⏳ attaches but unusable at current location — **band mismatch** (B20 only); needs B1/B3 or antenna |
+| Tailscale / AdGuard | ⏳ installed, dormant (need working WAN + config) |
+| Voice audio bridge | ⏳ off; needs one-time tinymix spike during a registered call |
+| Delete the stock app | ⏳ pending host-side plumbing-takeover test (`cockpit/api/deploy/uz-netservices.sh`) |
+
+## 6. Repo layout
+- [`README.md`](README.md) — chronological investigation log.
+- [`SPECS.md`](SPECS.md) — full hardware specs.
+- [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md) · [`EXPLOITS.md`](EXPLOITS.md) · [`IP-INVESTIGATION.md`](IP-INVESTIGATION.md) — security.
+- [`CAPABILITIES.md`](CAPABILITIES.md) · [`ANTENNA.md`](ANTENNA.md) — bands/carriers + antenna guidance.
+- [`LINUX-OPTIONS.md`](LINUX-OPTIONS.md) · [`CHROOT-LINUX-PLAN.md`](CHROOT-LINUX-PLAN.md) · [`COCKPIT-API-PLAN.md`](COCKPIT-API-PLAN.md) — plans.
+- `cockpit/api/` — Python-stdlib HTTPS API (modem AT, SMS/call, auth/TLS, direct platform impls, stock proxy).
+- `cockpit/web/` — vanilla SPA dashboard.
+- `alpine/` — chroot scaffolding (`enter.sh`, `start-services.sh`, `pc-apk-proxy.py`).
+- `webui/` — original PC-proxy UI + device scripts (`deploy/harden.sh`, `boot-hook.sh`, `start-webui.sh`); the `:8088` UI is decommissioned, scripts remain for harden/boot.
+- `dump/` — firmware dump text records (`.img` blobs gitignored; kept locally as the EDL restore set).
+
+## 7. Safety / lifelines
+- **USB-ADB root** is independent of everything above and is the always-on recovery path.
+- **SSH** into Alpine is a second root path, independent of the stock app.
+- Firewall is **runtime-applied at boot**; `unharden.sh` reverts it.
+- The stock app is **disabled-in-effect, not deleted** — fully reversible.
+- Full EDL restore images in `dump/` (local).
+
+## 8. Next steps (when ready)
+1. **Signal/antenna** — directional LTE antenna on B1/B3 → SMS/calls/data become usable.
+2. **Delete the stock app** — test `uz-netservices.sh` host-side (hostapd/dnsmasq/NAT/data takeover) with ADB lifeline, then `pm disable` + reboot-test, then remove the APK.
+3. **Tailscale** auth + **AdGuard** config (once WAN works).
+4. **Voice audio bridge** tinymix spike during a registered call.

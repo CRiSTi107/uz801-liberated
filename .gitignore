@@ -12,3 +12,12 @@ __pycache__/
 # Editor / OS cruft
 *.swp
 .DS_Store
+
+# Cockpit runtime secrets / state — device-only, never commit
+cockpit/api/config.json
+cockpit/api/*.db
+cockpit/api/certs/
+**/proxy.env
+
+# Local secrets file (owner-maintained) — never commit
+CREDENTIALS
