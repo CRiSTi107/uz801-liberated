@@ -35,7 +35,11 @@ is unusable B20) → SMS/calls/data don't work yet. **Not software-fixable** —
    verb. (Note B20 is unusable due to missing 800 MHz hardware, so band-lock wouldn't fix it anyway.)
    Still open: expose host `/system`+property area to the chroot so cockpit WiFi-**write**/restart
    + `getprop` work directly (finishes self-sufficiency).
-3. *(gated — needs owner go-ahead + careful reboot test)* **Delete the stock app**: run
+3. *(deferred — owner said "not now")* **WiFi AP drops**: owner observes the hotspot dropping.
+   Run a performance/stress test to diagnose (hostapd stability/logs, channel/interference,
+   throughput soak via iperf3, many-client test, thermal/CPU, USB-gadget contention). Keep the
+   USB-ADB + SSH lifelines up; never restart adbd during the test.
+4. *(gated — needs owner go-ahead + careful reboot test)* **Delete the stock app**: run
    `cockpit/api/deploy/uz-netservices.sh` host-side to take over hostapd/dnsmasq/NAT/data, verify
    WiFi/DHCP/data survive with the app `pm disable`d (USB-ADB lifeline), then remove the APK.
 

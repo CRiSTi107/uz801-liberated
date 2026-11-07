@@ -37,20 +37,22 @@ _CME_RE = re.compile(r"^\+(CME|CMS) ERROR:", re.I)
 # EARFCN -> (band label, approximate downlink MHz). Values that the task spec
 # calls out explicitly; extend as more cells are observed on this device.
 _EARFCN_BANDS = {
+    # Cells actually observed on this device (Digi RO).
     525: ("B1", 2100),
-    1800: ("B3", 1800),   # approximate (B3 EARFCN range ~1200-1949)
-    6425: ("B20", 800),
-    3650: ("B8", 900),
-    3100: ("B40", 2300),  # approximate
+    3350: ("B7", 2600),   # seen on the balcony - fades hard, not usable here
+    6425: ("B20", 800),   # strongest cell indoors - hardware can't use 800 MHz
 }
-# Range fallbacks (3GPP downlink EARFCN ranges) for bands this board supports.
+# Range fallbacks (3GPP downlink E-UTRA EARFCN ranges). Covers the bands this
+# board supports (B1/B3/B5/B8/B40) plus the ones it keeps camping on but can't
+# use (B7/B20), so both get labelled rather than showing as unknown.
 _EARFCN_RANGES = [
     (0, 599, "B1", 2100),
     (1200, 1949, "B3", 1800),
     (2400, 2649, "B5", 850),
+    (2750, 3449, "B7", 2600),
     (3450, 3799, "B8", 900),
-    (38650, 39649, "B40", 2300),
     (6150, 6449, "B20", 800),
+    (38650, 39649, "B40", 2300),
 ]
 
 
