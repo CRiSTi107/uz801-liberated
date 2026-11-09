@@ -561,19 +561,35 @@ class ModemControl:
         # delivery to the TE, so our poller controls reads.
         return self.at("AT+CNMI=2,1,0,0,0")
 
-    def sms_list_pdu(self, stat=4):
-        """List messages in PDU mode. stat 4 = ALL. Returns list of dicts."""
-        self.at("AT+CMGF=0")
-        res = self.at("AT+CMGL=%d" % stat, timeout=15)
-        return _parse_cmgl_pdu(res.lines)
+    def sms_set_storage(self, mem="SM"):
+        """Select SMS storage. On this modem incoming messages land on the SIM
+        ('SM') while the default read pointer is 'ME' (empty) - which made the
+        cockpit inbox look empty. Point all three CPMS slots at the SIM so
+        list/read/delete operate on received messages."""
+        return self.at('AT+CPMS="%s","%s","%s"' % (mem, mem, mem))
 
-    def sms_read_pdu(self, index):
+    def sms_list_pdu(self, stat=4):
+        """List messages in PDU mode. stat 4 = ALL. Returns list of dicts.
+        Reads both SIM (SM) and phone (ME) storage so nothing is missed."""
+        out = []
+        for mem in ("SM", "ME"):
+            self.sms_set_storage(mem)
+            self.at("AT+CMGF=0")
+            res = self.at("AT+CMGL=%d" % stat, timeout=15)
+            for m in _parse_cmgl_pdu(res.lines):
+                m["storage"] = mem
+                out.append(m)
+        return out
+
+    def sms_read_pdu(self, index, mem="SM"):
+        self.sms_set_storage(mem)
         self.at("AT+CMGF=0")
         res = self.at("AT+CMGR=%d" % index, timeout=10)
         msgs = _parse_cmgr_pdu(res.lines, index)
         return msgs[0] if msgs else None
 
-    def sms_delete(self, index):
+    def sms_delete(self, index, mem="SM"):
+        self.sms_set_storage(mem)
         return self.at("AT+CMGD=%d" % index)
 
     def sms_send(self, number, text, require_registration=True):
