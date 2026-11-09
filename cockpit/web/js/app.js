@@ -654,8 +654,10 @@
   });
 
   /* ---- LTE band lock ---- */
-  $("#band-read").addEventListener("click", readBand);
-  $("#band-apply").addEventListener("click", async () => {
+  // Null-safe: if a stale index.html lacks these elements, skip binding rather
+  // than throw a TypeError that would blank the whole SPA during init.
+  $("#band-read")?.addEventListener("click", readBand);
+  $("#band-apply")?.addEventListener("click", async () => {
     try {
       await act(api.post("/band", { bands: $("#band-sel").value }), "Band lock applied");
       readBand();
