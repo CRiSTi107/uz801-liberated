@@ -21,3 +21,6 @@ cockpit/api/certs/
 
 # Local secrets file (owner-maintained) — never commit
 CREDENTIALS
+
+# Modem EFS/NV backup (binary, local-only restore set)
+diag/efs-backup/

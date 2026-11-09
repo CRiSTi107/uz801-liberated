@@ -9,6 +9,20 @@ stops hopping to the strong-but-unusable B20/B7 and stays registered on B1/B3.
 > `dump/` (incl. modem/EFS partitions) is the ultimate restore. Never touch IMEI (NV 550)
 > or any RF-calibration item.
 
+## PROGRESS (2026-11-09)
+- **Phase 0 ✅ DONE** — EFS/modem-state partitions backed up to `diag/efs-backup/` (local,
+  gitignored): `fsc`(p16,1K), `fsg`(p20,1.5M), `modemst1`(p13,1.5M), `modemst2`(p14,1.5M) +
+  md5s; the full `dump/` is the deeper restore.
+- **Phase 1 ✅ PROVEN** — `diag/qcdiag_probe.py` talks to `/dev/diag` from the Alpine chroot
+  and got a valid **Extended Build ID** reply from the modem. Key device facts:
+  `DIAG_IOCTL_SWITCH_LOGGING`=7 needs the **struct arg** `pack('<iiii',MEMORY_DEVICE_MODE,0,-1,0)`
+  (int form → EFAULT); write = `pack('<I',0x20)` + HDLC(payload); HDLC FCS = reflected 0x8408.
+  `/dev/diag` must be bind-mounted into the chroot (done live; add to `enter.sh` when we commit to it).
+- **Phase 2 ⏭ NEXT** — implement **EFS2** over this transport (SUBSYS cmd 0x4B, subsys 0x13:
+  HELLO→OPEN→READ→CLOSE) to **read** the LTE band item (discover its EFS path /
+  `lte_bc_config`), print the current value, compute the new B1/B3/B5/B8/B40 mask. **Read-only;
+  stop before any WRITE.**
+
 ## Why this is non-trivial (recap)
 - **No AT band-lock verb** on this modem (confirmed: `$QCBANDPREF` is 2G/3G-only; `!BAND`/
   `^SETBAND`/`^SYSCFGEX`/`$QCRAT` all ERROR).
