@@ -49,9 +49,13 @@ is unusable B20) → SMS/calls/data don't work yet. **Not software-fixable** —
    Run a performance/stress test to diagnose (hostapd stability/logs, channel/interference,
    throughput soak via iperf3, many-client test, thermal/CPU, USB-gadget contention). Keep the
    USB-ADB + SSH lifelines up; never restart adbd during the test.
-4. *(gated — needs owner go-ahead + careful reboot test)* **Delete the stock app**: run
-   `cockpit/api/deploy/uz-netservices.sh` host-side to take over hostapd/dnsmasq/NAT/data, verify
-   WiFi/DHCP/data survive with the app `pm disable`d (USB-ADB lifeline), then remove the APK.
+4. *(BLOCKED — dress rehearsal 2026-11-09 FAILED)* **Delete the stock app**: the reversible
+   `pm disable` + reboot test proved the app is **required for the WiFi-AP + DHCP bring-up** —
+   with it disabled, `hostapd`/`dnsmasq` don't start and `uz-netservices.sh` can't start them
+   (SoftAP needs **netd** interface/mode orchestration, not a bare `hostapd -B`). App re-enabled,
+   fully restored. **Before any delete, rewrite the takeover to use `ndc softap`/`ndc tether`
+   (drive netd), then re-run the rehearsal.** The app stays (decommissioned/firewalled) until then.
+   Lifelines, APK backup (`/data/backups`), and EDL restore set are all in place.
 
 To resume on another PC: `git pull`, read `CLAUDE.md` + this block, connect to the device
 (`adb -s 0123456789ABCDEF` / cockpit `https://192.168.100.1` / `ssh root@192.168.100.1`;

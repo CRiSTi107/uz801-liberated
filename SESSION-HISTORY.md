@@ -33,6 +33,24 @@ blocker is **intermittent EMM attach failure**, not band selection.
 **Next:** a soak run with both monitors (balcony / real use) to characterize the intermittent attach
 and the AP drops; the antenna remains the clean hardware route; stock-app delete stays gated.
 
+### Delete pre-flight + dress rehearsal (FAILED, reversible — app kept)
+Asked to "make sure I have everything before deleting the Chinese backdoor apps."
+- **Readiness (all ✅):** lifelines (USB-ADB root + SSH); scope confirmed = **`MifiService.apk` only**
+  (the rest of `/system` is standard Android/Qualcomm); backed up the APK → `/data/backups` (md5
+  `74f5280b…`) + recoverable from `system.img`; EDL restore set present; cockpit reads are direct.
+- **Fixed `uz-netservices.sh`**: its `pgrep/pidof/dirname` don't exist on the Android host shell, so it
+  mis-detected running services; replaced with a busybox `proc_running()` (+ `${v%/*}`, busybox
+  printf/dd/tr). Verified a **clean all-OK no-op** while the app runs; wired into the boot-hook.
+- **Dress rehearsal (reversible):** `pm disable com.mifiservice.hello` + reboot. Result: cockpit/SSH/
+  `br0` survived, **but hostapd + dnsmasq did NOT come up** and `uz-netservices.sh` couldn't start them
+  (`FAIL`). **Finding:** the SoftAP/DHCP bring-up needs **netd** orchestration (interface mode, AP
+  firmware, tether) that the stock app triggers via the framework — a bare `hostapd -B`/`dnsmasq` is
+  insufficient. ⇒ **app not safely deletable yet.** `pm enable` + reboot → **fully restored**
+  (hostapd/dnsmasq/`:80`/cockpit/SSH back, PC got a lease, cockpit 200).
+- **Prerequisite before delete:** rewrite the takeover to drive **`ndc softap set/startap` + `ndc tether`**
+  (netd client) rather than launching the daemons directly, then re-run this rehearsal. App stays
+  (decommissioned/firewalled — the backdoor is already neutralized) until that's proven.
+
 ---
 
 ## Session 2026-11-07 → 2026-11-09 — SMS fast-fail, band-lock feature, live signal diagnosis
