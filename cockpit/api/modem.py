@@ -689,6 +689,11 @@ class ModemControl:
             m = re.search(r'\+CLCC:\s*(\d+),(\d+),(\d+),(\d+),(\d+)'
                           r'(?:,"([^"]*)")?', line)
             if m:
+                # CLCC field 4 = mode: 0=voice, 1=data, 2=fax. The LTE data
+                # bearer (PDP context) shows up here as a mode=1 "call"; skip it
+                # so it never appears as a stuck incoming voice call in the UI.
+                if int(m.group(4)) != 0:
+                    continue
                 calls.append({
                     "id": str(int(m.group(1))),
                     "direction": dir_map.get(int(m.group(2)), "outgoing"),
