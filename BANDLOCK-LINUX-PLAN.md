@@ -1,0 +1,84 @@
+# Execution Plan — On-device (Linux) LTE band-lock
+
+**Goal:** lock the modem to the usable LTE bands **B1/B3/B5/B8/B40** and disable
+**B7/B20** (and others), entirely **on the dongle over Linux** (no Windows/QPST), so it
+stops hopping to the strong-but-unusable B20/B7 and stays registered on B1/B3.
+
+> **This is advanced and carries real brick risk** (modem NV/EFS editing). It is gated
+> behind explicit go + backups. USB-ADB root is the lifeline throughout; the full
+> `dump/` (incl. modem/EFS partitions) is the ultimate restore. Never touch IMEI (NV 550)
+> or any RF-calibration item.
+
+## Why this is non-trivial (recap)
+- **No AT band-lock verb** on this modem (confirmed: `$QCBANDPREF` is 2G/3G-only; `!BAND`/
+  `^SETBAND`/`^SYSCFGEX`/`$QCRAT` all ERROR).
+- **No userspace QMI node** (`libqmi`/`qmicli` need `cdc-wdm`/QRTR; this is SMD+`qmuxd`).
+- ⇒ the only on-device door is **`/dev/diag`** (present, char 245,0) speaking the Qualcomm
+  **DIAG** protocol, OR a QMI client that talks to **`qmuxd`**'s socket.
+
+## Two routes (A = safer/temporary, B = persistent)
+### Route A — QMI runtime band preference (SAFER, non-persistent → re-apply at boot)
+Send QMI **NAS "Set System Selection Preference"** with an `lte_band_pref` bitmask. This is
+a **runtime** setting: no NV write, reverts on reboot (so **no brick risk**), re-applied
+each boot from our boot-hook.
+- **Blocker:** reaching QMI. `qmuxd` owns the QMI control channels (`/dev/smdcntl*`). Options
+  to investigate: (a) connect to qmuxd's QMUX socket (`/dev/socket/qmux_*`) and speak QMUX+QMI;
+  (b) find a free `smdcntl` and speak raw QMI. Both need a small QMUX/QMI client (no FOSS one
+  targets qmuxd directly). **Investigation step decides if A is feasible before touching NV.**
+
+### Route B — DIAG write of the band NV/EFS (PERSISTENT, riskier)
+Write the LTE band item via DIAG: **NV 65633 `lte_bc_config`** (an EFS item;
+`/nv/item_files/modem/mmode/lte_bc_config` or `lte_bandpref`). Persistent across reboots.
+This is the "real" band-lock but a bad EFS write can corrupt modem config.
+
+## Tooling (build in the Alpine chroot; python3 already installed)
+- Base the DIAG transport on **QCSuper** (P1sec/QCSuper, MIT, mostly pure-Python) — it already
+  implements `/dev/diag` access (the `DIAG_IOCTL_SWITCH_LOGGING` ioctl + HDLC 0x7E framing +
+  CRC16). We reuse its transport and **add an EFS2 read/write** for the band item.
+- DIAG essentials to implement/verify: HDLC frame (escape 0x7D/0x7E, append CRC-16-CCITT,
+  terminate 0x7E); EFS2 subsystem (cmd 0x4B, subsys 0x13) ops: `HELLO`, `OPEN`, `READ`,
+  `WRITE`, `CLOSE` — or NV_READ/NV_WRITE (0x26/0x27) if the item is legacy NV.
+- Band mask (bit N-1 = E-UTRA band N): keep **B1(bit0) B3(bit2) B5(bit4) B8(bit7) B40(bit39)**;
+  clear **B7(bit6) B20(bit19)** and the rest. (Little-endian 8-byte mask ⇒ byte0=0x95, byte4=0x80,
+  rest 0x00 — **verify against the item's actual format after the READ**, do not assume.)
+
+## Phases
+0. **Pre-flight / backup (do all):**
+   - Confirm USB-ADB root + SSH lifelines.
+   - `apk add python3 py3-pip` (have it); fetch QCSuper into the chroot (via the PC proxy or
+     a pushed tarball — it's small, pure-Python + a couple deps).
+   - **Dump the modem EFS partitions now** for a guaranteed restore: `adb pull` of
+     `by-name/{modemst1,modemst2,fsg,fsc}` (small) → keep alongside `dump/`. (The firmware
+     `dump/` already has `modem.img`; add the live EFS state.)
+1. **DIAG bring-up:** get QCSuper (or our minimal client) talking to `/dev/diag` — prove it by
+   reading a benign item (e.g. EFS `HELLO`, or the software version via DIAG).
+2. **READ the band item (backup the exact bytes):** EFS read `lte_bc_config` (try the known
+   paths / NV 65633). Save the raw value. **This also reveals the real format** so the new
+   mask is computed correctly (not assumed).
+3. **Decide A vs B:** if Route A (QMI/qmuxd) proved feasible in step 1's sibling investigation,
+   prefer it (reversible). Otherwise Route B (EFS write).
+4. **WRITE the new band mask** (B1/B3/B5/B8/B40). Single item, exact length as read back.
+5. **Apply:** `modem_at "AT+CFUN=1,1"` (modem reset) — avoid a full device reboot (WiFi wedge).
+6. **VERIFY:** `diag/signal-monitor.sh` — the modem must now only ever show B1/B3/B5/B8/B40 and
+   never B20/B7; registration should become stable.
+7. **Rollback if wrong:** EFS-write the saved bytes back (step 2), or restore the EFS partitions
+   dumped in step 0, or full `dump/` restore via EDL.
+
+## Risk table
+| Step | Risk | Mitigation |
+|------|------|------------|
+| DIAG EFS write wrong item/len | modem no-service / brick | read-first exact bytes; only the band item; EFS partition backup |
+| CFUN reset | transient drop | expected; re-registers |
+| Mask format wrong | bad band set | compute from the READ value, verify, keep backup |
+| Tooling bug | corrupt write | dry-run reads first; small, reviewed writer |
+
+## Deliverables (when executed)
+- `diag/qcdiag.py` (or vendored QCSuper + `diag/bandlock.py`) — the DIAG client + band read/write.
+- `diag/bandlock-backup/` — the pre-change band bytes + EFS partition dumps.
+- Boot-hook line (Route A only) to re-apply the runtime band pref each boot.
+- Logged in README / PROGRESS / SESSION-HISTORY.
+
+## Go/no-go
+Proceed phase-by-phase; **stop and show the READ value before any WRITE.** If DIAG bring-up
+or the EFS read can't be made reliable, fall back to the RF route (directional antenna + 800 MHz
+notch filter) or Windows QPST — band-lock is an optimization, not required for the dongle to work.
