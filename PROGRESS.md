@@ -25,6 +25,10 @@ re-applies the saved mask on every cockpit start (cockpit starts at boot), and `
 B3-only then restart cockpit → auto-restored to saved {B1,B3,B5,B8,B40}; and post-restart the modem
 came up **`registered` on B1 (EARFCN 525)**. Default lock persisted = {B1,B3,B5,B8,B40}. Signal is
 still the ceiling (antenna) but the modem now registers when B1/B3 is strong enough.
+**Band scan added** (`POST /api/band/scan` → `qmi.scan_bands`; "Scan bands" button): briefly locks
+each usable band (~6s each, ~35s total, drops data), reports which band has a reachable cell + RSRP
+(matched to the locked band), restores the prior lock, and renders a signal-sorted table with
+one-click Lock-per-band. All QMI band ops serialized under one lock.
 
 **2026-11-09 ✅ — Route A QMI band-lock APPLIED & VERIFIED (but signal is the real blocker).**
 Route A succeeded: qmuxd holds `/dev/smdcntl0..7` but **`smdcntl8` is free** → standard **QMUX/QMI**
