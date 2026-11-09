@@ -10,10 +10,20 @@ Living log of day-to-day steps is in [`README.md`](README.md); deep docs are lin
 
 ---
 
-## ▶ RESUME HERE (last updated 2026-11-07)
+## ▶ RESUME HERE (last updated 2026-11-09)
 **State:** Clean checkpoint. Backdoor **decommissioned** (not deleted), cockpit (API+UI)
 deployed & auto-starting on boot, SSH + USB-ADB root lifelines working, everything committed
 & pushed (`origin` = private `uz801-liberated`). See §5 for the full status table.
+
+**2026-11-09 update — software band-lock RULED OUT, diagnostics added.** The NV/QMI band-lock
+is **not cleanly feasible on this modem**: no AT band-lock verb; `libqmi`/`qmicli` can't reach
+it (internal modem over SMD+`qmuxd`, no `cdc-wdm`/QRTR); NV 65633 `lte_bc_config` is EFS-only via
+a custom diag write (no tool, brick risk) → declined. And it likely wouldn't help: live data
+showed strong **usable B3 (−69 dBm)** yet attach still failed (`+CEER: EMM attach failed`), so the
+blocker is intermittent **EMM attach failure**, not band choice. Added read-only diagnostics
+`diag/signal-monitor.sh` (registration/band/CEER logger) + `diag/wifi-watch.sh` (AP-drop + CPU/temp
+logger), both verified live — modem oscillates registered↔denied (seen reg'd on **B1 @ −88 dBm**);
+WiFi up but **CPU load ≈ 4.9 / 2 cores** (likely behind the hotspot drops).
 
 **The one blocker:** cellular **signal/band mismatch** (supported B1/B3 are weak, strong cell
 is unusable B20) → SMS/calls/data don't work yet. **Not software-fixable** — needs a directional

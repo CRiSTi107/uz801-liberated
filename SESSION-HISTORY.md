@@ -7,6 +7,34 @@ log see the Status Log in [`README.md`](README.md).
 
 ---
 
+## Session 2026-11-09 — band-lock feasibility (ruled out) + diagnostics
+
+**Asked:** pursue the NV band-lock ("yes"), antenna later, do the deferred items, and write
+scripts + log.
+
+**Band-lock — investigated, ruled out as a software fix on this unit.** Recon of the QMI/diag
+path: `/dev/diag` + `/dev/smdcntl0-7` exist, but `rild`+`qmuxd` own the QMI channels and there is
+**no `cdc-wdm`/QRTR node**, so `libqmi`/`qmicli` (present in Alpine community) has nothing to talk
+to. NV 65633 `lte_bc_config` is an EFS item writable only via a bespoke **diag** EFS write — no
+off-the-shelf Linux tool, real brick risk → declined per the "don't brick it" rule. Also found it
+**wouldn't help anyway**: `$QCRSRP` showed strong **usable B3 (EARFCN 1400 @ −69 dBm)** while the
+modem was `CGATT:0` / `CEREG:0,3` DENIED; `+CEER` only reports "EMM attach failed". So the real
+blocker is **intermittent EMM attach failure**, not band selection.
+
+**Diagnostics built + verified live (`diag/`):**
+- `signal-monitor.sh` — read-only; logs CEREG/CGATT/CSQ/`$QCRSRP` every N s, decodes EARFCN→band,
+  flags usable (B1/B3/B5/B8/B40) vs not (B7/B20/B38), grabs `+CEER` on denied transitions. Live run
+  caught the modem **registered (`CEREG=1-home CGATT=1`) on B1 525 @ −88 dBm**, flagging `B7:3350@−69`
+  as unusable — confirming it oscillates registered↔denied.
+- `wifi-watch.sh` — read-only AP watchdog; logs hostapd pid, `wlan0` carrier/operstate, client count,
+  loadavg, SoC temp; marks AP DROP/RECOVER transitions. Live: AP up, 1 client, but **load ≈ 4.9 on
+  2 cores**, temp ~56 °C — prime suspect for the reported hotspot drops.
+
+**Next:** a soak run with both monitors (balcony / real use) to characterize the intermittent attach
+and the AP drops; the antenna remains the clean hardware route; stock-app delete stays gated.
+
+---
+
 ## Session 2026-11-07 → 2026-11-09 — SMS fast-fail, band-lock feature, live signal diagnosis
 
 **Context at start:** clean checkpoint; the one blocker was the cellular B20 band mismatch
