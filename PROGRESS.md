@@ -15,7 +15,18 @@ Living log of day-to-day steps is in [`README.md`](README.md); deep docs are lin
 deployed & auto-starting on boot, SSH + USB-ADB root lifelines working, everything committed
 & pushed (`origin` = private `uz801-liberated`). See §5 for the full status table.
 
-**2026-11-09 NEWEST ✅ — Route A QMI band-lock APPLIED & VERIFIED (but signal is the real blocker).**
+**2026-11-09 NEWEST ✅ — band-lock is now a persisted COCKPIT feature (UI + boot re-apply).**
+The QMI band-lock is wired into the cockpit: `cockpit/api/qmi.py` (shared QMI module), `GET/POST
+/api/band` rewired to QMI (`ep_band_get` → `configured:true` + current/saved masks + reg_state;
+`ep_band_set` → QMI SET + **persists the mask** to `/opt/cockpit/api/bandlock.mask`). The existing
+"LTE band lock" card now lights up and works. **Boot persistence:** `App.apply_saved_bandlock()`
+re-applies the saved mask on every cockpit start (cockpit starts at boot), and `alpine/enter.sh`
+`mknod`s `/dev/smdcntl8` into the chroot. **Verified on-device:** apply B3→read-back B3; set
+B3-only then restart cockpit → auto-restored to saved {B1,B3,B5,B8,B40}; and post-restart the modem
+came up **`registered` on B1 (EARFCN 525)**. Default lock persisted = {B1,B3,B5,B8,B40}. Signal is
+still the ceiling (antenna) but the modem now registers when B1/B3 is strong enough.
+
+**2026-11-09 ✅ — Route A QMI band-lock APPLIED & VERIFIED (but signal is the real blocker).**
 Route A succeeded: qmuxd holds `/dev/smdcntl0..7` but **`smdcntl8` is free** → standard **QMUX/QMI**
 to the modem gives a parallel QMI control point. Tools: `diag/qmi_probe.py`, `qmi_bandpref.py`,
 `qmi_bandset_probe.py`, `qmi_bandlock.py`. **Applied** (owner-approved) QMI NAS Set System Selection

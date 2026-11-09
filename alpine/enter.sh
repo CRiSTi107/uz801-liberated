@@ -32,6 +32,9 @@ if ! busybox mount | busybox grep -q "tmpfs on $R/dev "; then
   # modem AT channel (cockpit API) + sound devices (audio bridge)
   [ -e /dev/smd11 ] && { : > "$R/dev/smd11"; busybox mount -o bind /dev/smd11 "$R/dev/smd11"; }
   [ -d /dev/snd ]   && { busybox mkdir -p "$R/dev/snd"; busybox mount -o bind /dev/snd "$R/dev/snd"; }
+  # free QMI control channel (cockpit band-lock): qmuxd holds smdcntl0..7,
+  # smdcntl8 is unused -> char 244,8. mknod it so the chroot can open it.
+  busybox mknod "$R/dev/smdcntl8" c 244 8 2>/dev/null; busybox chmod 660 "$R/dev/smdcntl8" 2>/dev/null
 fi
 
 # Host paths the cockpit reads directly (WiFi hostapd.conf, dnsmasq leases, wifi nv)

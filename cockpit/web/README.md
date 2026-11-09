@@ -143,8 +143,8 @@ Same-origin WS (`wss:` under HTTPS). Contract:
 | `GET /api/network/apn` | — | `{ apn, user, pwd, auth }` |
 | `POST /api/network/apn` | `{ apn, user, pwd, auth }` | save profile |
 | `POST /api/network/netmode` | `{ mode }` | `mode` ∈ `auto \| 4g \| 3g \| 2g` |
-| `GET /api/band` | — | `{ supported[], serving{band,usable,hint}, cells[], configured, current }` |
-| `POST /api/band` | `{ bands }` | `bands` = `auto` \| a label (`B3`) \| a list (`["B1","B3"]`); 501 if `platform.band_at` unset |
+| `GET /api/band` | — | `{ supported[], serving{band,earfcn,usable,hint}, cells[], configured, mechanism, reg_state, current{mask_hex,bands[]}, saved{mask_hex,bands[]} }` |
+| `POST /api/band` | `{ bands, permanent? }` | `bands` = `auto` \| a label (`B3`) \| a list (`["B1","B3"]`). Locks LTE over **QMI** (runtime, change_duration=power-cycle); mask is persisted to `platform.band_maskfile` and re-applied on every cockpit start. `permanent:true` writes NV (avoid). `configured:true` = QMI path usable (lights up the UI). |
 
 Registration/band info for this tab comes from `GET /api/status` (mirrored).
 

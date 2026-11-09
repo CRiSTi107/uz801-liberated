@@ -679,16 +679,29 @@
       const apply = $("#band-apply"), sel = $("#band-sel");
       if (b.configured) {
         apply.disabled = false; sel.disabled = false;
-        $("#band-note").textContent = "Band-lock command is configured for this modem.";
+        const cur = (b.current && b.current.bands) || [];
+        const saved = (b.saved && b.saved.bands) || [];
+        const reg = b.reg_state ? ` · registration: ${esc(b.reg_state)}` : "";
+        // Preselect the dropdown to match what's currently locked: a single
+        // band -> that option; the full supported set -> "auto".
+        const supported = (b.supported || []).slice().sort().join(",");
+        if (cur.length === 1 && [...sel.options].some(o => o.value === cur[0])) {
+          sel.value = cur[0];
+        } else if (cur.slice().sort().join(",") === supported) {
+          sel.value = "auto";
+        }
+        $("#band-note").innerHTML =
+          `Band-lock is active over <b>QMI</b> (runtime; re-applied each boot).` +
+          (cur.length ? ` Currently locked to <span class="mono">${esc(cur.join(", "))}</span>.` : "") +
+          (saved.length ? ` Persisted: <span class="mono">${esc(saved.join(", "))}</span>.` : "") +
+          reg;
       } else {
-        // This modem's firmware exposes no LTE band-lock AT command (verified),
-        // so the control is display-only here; selection is automatic.
+        // QMI channel unavailable (should not happen on this unit) -> read-only.
         apply.disabled = true; sel.disabled = true;
-        $("#band-note").textContent =
-          "Band-lock isn't available on this modem's firmware (no LTE band-lock " +
-          "AT command), so this card is read-only. The radio already scans all " +
-          "supported bands (B1/B3/B5/B8/B40) and picks the best automatically; a " +
-          "strong B20 cell can't be used because the hardware lacks 800 MHz.";
+        $("#band-note").textContent = b.error
+          ? ("Band-lock control unavailable: " + b.error)
+          : ("Band-lock control unavailable on this device. The radio scans all " +
+             "supported bands (B1/B3/B5/B8/B40) and picks the best automatically.");
       }
     } catch (err) {
       if (err instanceof ApiError && err.offline) setOffline(true);

@@ -17,6 +17,7 @@ __pycache__/
 cockpit/api/config.json
 cockpit/api/*.db
 cockpit/api/certs/
+cockpit/api/bandlock.mask
 **/proxy.env
 
 # Local secrets file (owner-maintained) — never commit

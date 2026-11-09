@@ -73,9 +73,20 @@ After Route B (DIAG) proved a dead end, Route A succeeded:
     and necessary, but the **real blocker is signal** — the modem can't attach on B1/B3/B5/B8/B40
     because the usable cells are too weak. This is the **antenna** problem (see `ANTENNA.md`),
     exactly as predicted; band-lock alone does not restore service.
-- **Persistence:** the lock is runtime (reverts on reboot). To keep it, re-run
-  `qmi_bandlock.py --apply` from `webui/deploy/boot-hook.sh` each boot (needs
-  `mknod /dev/smdcntl8 c 244 8` in the chroot first). **Not yet wired** — offered as next step.
+- **✅ PERSISTENCE + COCKPIT UI DONE (2026-11-09):** the band-lock is now a first-class cockpit
+  feature (the pre-existing "LTE band lock" card is now live).
+  - `cockpit/api/qmi.py` — shared QMI band module (read/apply + mask save/load + CLI). The cockpit
+    endpoints `GET/POST /api/band` use it; `ep_band_get` returns `configured:true` + current/saved
+    masks + reg_state, `ep_band_set` applies over QMI and **persists the mask** to
+    `/opt/cockpit/api/bandlock.mask` (gitignored).
+  - **Boot persistence:** `App.apply_saved_bandlock()` re-applies the saved mask on every cockpit
+    start (the cockpit starts at boot via `boot-hook → start-services`), so the runtime lock
+    survives reboots. `alpine/enter.sh` now `mknod`s `/dev/smdcntl8 c 244 8` into the chroot.
+  - **Verified on-device:** apply B3→read-back B3; set B3-only then restart cockpit → auto-restored
+    to the saved {B1,B3,B5,B8,B40}; and after a restart the modem came up **`reg_state=registered`
+    on B1 (EARFCN 525)**. UI (`cockpit/web`) shows the active QMI lock, current/persisted bands,
+    and registration, and preselects the dropdown.
+  - The owner-side `diag/qmi_*.py` scripts remain as the standalone RE/diagnostic tools.
 
 ## Why this is non-trivial (recap)
 - **No AT band-lock verb** on this modem (confirmed: `$QCBANDPREF` is 2G/3G-only; `!BAND`/

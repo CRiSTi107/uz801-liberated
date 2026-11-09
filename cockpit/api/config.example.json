@@ -54,7 +54,10 @@
         "auto": "AT$QCBANDPREF=0xFFFFFFFFFFFFFFFF",
         "query": "AT$QCBANDPREF?"
       }
-    }
+    },
+    "qmi_channel": "/dev/smdcntl8",
+    "_qmi_comment": "The band-lock on THIS modem is done over QMI, not AT (the modem has no LTE band-lock AT verb; see band_at). qmuxd holds /dev/smdcntl0..7, so the cockpit opens the free smdcntl8 and sends QMI_NAS Set System Selection Preference (lte_band_pref at TLV 0x15, change_duration=power-cycle=runtime). enter.sh mknods this node into the chroot. The chosen mask is persisted to band_maskfile and re-applied on every cockpit start (the SET is runtime and reverts on reboot otherwise).",
+    "band_maskfile": "/opt/cockpit/api/bandlock.mask"
   },
 
   "security": {

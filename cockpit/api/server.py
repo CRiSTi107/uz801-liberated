@@ -31,6 +31,7 @@ from db import Database
 from auth import AuthManager, COOKIE_NAME
 import modem as modemmod
 import uzplatform as platformmod
+import qmi as qmimod
 from stockproxy import StockProxy, MockStockProxy, StockProxyError
 import tlsutil
 import audiobridge
@@ -154,6 +155,13 @@ class App:
         self.prefer_direct = plat_cfg.get("prefer_direct", True)
         self._netmode_at = plat_cfg.get("netmode_at", {})
         self._band_at = plat_cfg.get("band_at", {})
+        # QMI band control (the working band-lock path on this modem): a free
+        # SMD control channel + an optional persisted mask re-applied at boot.
+        self._qmi_channel = plat_cfg.get("qmi_channel",
+                                         qmimod.DEFAULT_CHANNEL)
+        self._band_maskfile = plat_cfg.get("band_maskfile",
+                                           qmimod.DEFAULT_MASKFILE)
+        self._mock = mock
         self._start_time = time.time()
         self._sms_poll_seconds = cfg.get("sms_poll_seconds", 20)
         self._stop = threading.Event()
@@ -164,6 +172,28 @@ class App:
         self._link = {"ping_ms": None, "up": False,
                       "target": self._link_target}
         self._link_lock = threading.Lock()
+
+    # --- band lock (QMI) -----------------------------------------------------
+    def apply_saved_bandlock(self):
+        """Re-apply the persisted LTE band mask at boot (runtime QMI SET).
+
+        The lock is runtime (reverts on reboot), so the cockpit re-applies it
+        each start. No-op in mock mode or when no mask has been saved.
+        """
+        if self._mock:
+            return
+        mask = qmimod.load_mask(self._band_maskfile)
+        if mask is None:
+            return
+        try:
+            res = qmimod.apply_band(mask, self._qmi_channel)
+            if res.get("ok"):
+                log.info("band-lock re-applied: %s %s",
+                         res.get("mask_hex"), res.get("bands"))
+            else:
+                log.warning("band-lock re-apply failed: %s", res)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("band-lock re-apply error: %s", exc)
 
     # --- link health ---------------------------------------------------------
     def start_link_poller(self):
@@ -782,54 +812,89 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- band lock ---------------------------------------------------------
     def ep_band_get(self, query, args, session):
-        """Report supported bands, the live serving band, and the band-lock
-        config state (so the UI knows whether locking is wired for this modem).
+        """Report supported bands, the live serving band, the current QMI
+        band-lock (and the saved/persisted mask). ``configured`` is true when
+        the QMI band-lock path is usable on this modem, which lights up the UI.
         """
         m = self.app.modem
         try:
             sig = m.signal()
         except Exception:  # noqa: BLE001
             sig = {}
-        serving = sig.get("band")
+        # Live QMI read: current lte_band_pref + serving band + reg state.
+        qread = {}
+        if not self.app._mock:
+            try:
+                qread = qmimod.read_band(self.app._qmi_channel)
+            except Exception as exc:  # noqa: BLE001
+                qread = {"ok": False, "error": str(exc)}
+        saved = qmimod.load_mask(self.app._band_maskfile)
+
+        serving = (qread.get("serving") or {}).get("band") or sig.get("band")
+        earfcn = (qread.get("serving") or {}).get("earfcn") or sig.get("earfcn")
         usable, hint = modemmod.band_usable(serving)
-        status = m.band_status(self.app._band_at)
+        configured = bool(qread.get("ok"))
         return {
             "supported": modemmod.LTE_BANDS_SUPPORTED,
             "serving": {
                 "band": serving,
-                "earfcn": sig.get("earfcn"),
+                "earfcn": earfcn,
                 "rsrp": sig.get("rsrp"),
                 "usable": usable,
                 "hint": hint,
             },
-            # cells currently visible, each tagged usable/not, to guide choice
             "cells": [
                 dict(c, usable=modemmod.band_usable(c.get("band"))[0])
                 for c in sig.get("cells", [])
             ],
-            "configured": bool(self.app._band_at),
-            "current": status,
+            "configured": configured,
+            "mechanism": "qmi" if configured else "none",
+            "reg_state": qread.get("reg_state"),
+            # the mask the modem is currently enforcing
+            "current": {
+                "mask_hex": qread.get("mask_hex"),
+                "bands": qread.get("bands", []),
+            },
+            # the mask we persist and re-apply at boot (None = not locked)
+            "saved": {
+                "mask_hex": ("0x%016x" % saved) if saved is not None else None,
+                "bands": qmimod.mask_to_bands(saved) if saved is not None else [],
+            },
+            "error": qread.get("error"),
         }
 
     def ep_band_set(self, query, args, session):
-        """Lock LTE to band(s), or 'auto' for all supported bands.
+        """Lock LTE to band(s) over QMI (runtime), or 'auto' for all supported.
 
-        Body: {"bands": "auto" | "B3" | ["B1","B3"]}.
+        Body: {"bands": "auto" | "B3" | ["B1","B3"], "permanent": false}.
+        The mask is persisted and re-applied on every cockpit start; the SET
+        itself is runtime (change_duration = power-cycle) unless permanent.
         """
+        if self.app._mock:
+            raise ApiError(501, "band-lock unavailable in mock mode")
         body = self._read_json()
         bands = body.get("bands")
         if bands is None:
             raise ApiError(400, "bands is required ('auto', a label, or a list)")
-        res = self.app.modem.band_lock(bands, self.app._band_at)
-        if res["source"] == "unconfigured":
-            raise ApiError(
-                501,
-                "band-lock AT command is not configured for this modem - set "
-                "platform.band_at in config.json (the exact command is "
-                "Qualcomm-modem-specific; see config.example.json). Requested "
-                "bands=%s mask=0x%s." % (res["bands"], res["mask_hex"]))
-        if not res["ok"]:
-            raise ApiError(502, "modem rejected band set: %s" % res["status"])
+        permanent = bool(body.get("permanent", False))
+        mask = qmimod.bands_to_mask(bands)
+        if mask == 0:
+            raise ApiError(400, "no valid bands in %r" % (bands,))
+        try:
+            res = qmimod.apply_band(mask, self.app._qmi_channel,
+                                    permanent=permanent)
+        except Exception as exc:  # noqa: BLE001
+            raise ApiError(502, "QMI band set failed: %s" % exc)
+        if not res.get("ok"):
+            raise ApiError(502, "modem rejected band set: result=%s error=%s"
+                           % (res.get("result"), res.get("error")))
+        # persist so the boot-time re-apply keeps it across reboots
+        try:
+            qmimod.save_mask(mask, self.app._band_maskfile)
+            res["persisted"] = True
+        except OSError as exc:
+            res["persisted"] = False
+            res["persist_error"] = str(exc)
         return res
 
     # --- SMS ---------------------------------------------------------------
@@ -1360,6 +1425,7 @@ def main():
                   file_path=cfg["log"].get("file"))
 
     app = App(cfg, mock=mock, tls_enabled=use_tls)
+    app.apply_saved_bandlock()
     app.start_sms_poller()
     app.start_link_poller()
 
