@@ -18,10 +18,21 @@ stops hopping to the strong-but-unusable B20/B7 and stays registered on B1/B3.
   `DIAG_IOCTL_SWITCH_LOGGING`=7 needs the **struct arg** `pack('<iiii',MEMORY_DEVICE_MODE,0,-1,0)`
   (int form → EFAULT); write = `pack('<I',0x20)` + HDLC(payload); HDLC FCS = reflected 0x8408.
   `/dev/diag` must be bind-mounted into the chroot (done live; add to `enter.sh` when we commit to it).
-- **Phase 2 ⏭ NEXT** — implement **EFS2** over this transport (SUBSYS cmd 0x4B, subsys 0x13:
-  HELLO→OPEN→READ→CLOSE) to **read** the LTE band item (discover its EFS path /
-  `lte_bc_config`), print the current value, compute the new B1/B3/B5/B8/B40 mask. **Read-only;
-  stop before any WRITE.**
+- **Phase 2 🟡 IN PROGRESS** — `diag/qcdiag_efs.py` implements EFS2 over the proven transport
+  (SUBSYS 0x4B / subsys 0x13). **Findings (2026-11-09):**
+  - EFS2 **HELLO (subcmd 0)** and **QUERY (subcmd 1)** respond cleanly
+    (QUERY → `4b 13 01 00 03 00 00 00 ...` = version 3, limits). Transport + subsystem routing
+    are 100% working.
+  - **Every file-access subcommand is silently dropped** — `STATFS /` (root always exists),
+    `STAT /nv`, `STAT <path>`, and `OPEN <path>` all return **zero bytes** (not an errno).
+    A missing file would return an errno; silence on `STATFS /` means the ops are **gated**,
+    not failing. ⇒ **the modem's DIAG EFS file access is security-locked** (info cmds allowed,
+    FS cmds blocked until an SPC/password unlock — the same unlock QPST sends transparently).
+  - **Next:** send the **SPC unlock** (`DIAG_SPC_F` 0x25, SPC `000000`/`00000000`; maybe also
+    `DIAG_PASSWORD_F`) to open EFS, then `STAT`/`OPEN`/`READ` the band item, print its value.
+    (The `security unlock` run was blocked by Claude Code's auto-mode classifier as it resembles
+    a security-bypass — needs the user to allow that Bash step for this authorized, owned device.)
+  - **Still read-only; stop before any WRITE.**
 
 ## Why this is non-trivial (recap)
 - **No AT band-lock verb** on this modem (confirmed: `$QCBANDPREF` is 2G/3G-only; `!BAND`/
