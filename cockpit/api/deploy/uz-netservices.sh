@@ -52,6 +52,13 @@ PDP_CID="${PDP_CID:-1}"
 
 log() { echo "[uz-netservices] $*"; }
 have() { [ -x "$1" ] || command -v "$1" >/dev/null 2>&1; }
+# Portable "is process running?" — the Android host shell lacks pgrep/pidof,
+# so go through busybox (the [x]yz trick avoids self-matching the grep).
+proc_running() {
+  busybox pgrep -x "$1" >/dev/null 2>&1 && return 0
+  p="[${1%"${1#?}"}]${1#?}"
+  busybox ps -o args 2>/dev/null | busybox grep -qE "$p"
+}
 
 log "starting (WAN=$WAN_IFACE LAN=$LAN_IFACE LAN_IP=$LAN_IP)"
 
@@ -116,7 +123,7 @@ fi
 # 3. hostapd: (re)start WiFi AP with the existing conf. netd usually owns this
 #    - if a hostapd is already running we LEAVE IT ALONE (idempotent).
 # ===========================================================================
-if pgrep hostapd >/dev/null 2>&1 || pidof hostapd >/dev/null 2>&1; then
+if proc_running hostapd; then
   log "OK   [netd] hostapd already running - not touching it"
 else
   if [ -x "$HOSTAPD_BIN" ] && [ -f "$HOSTAPD_CONF" ]; then
@@ -140,11 +147,11 @@ fi
 #    dnsmasq is already running we LEAVE IT ALONE. Otherwise start one with a
 #    sane range and gateway/DNS = the dongle itself.
 # ===========================================================================
-if pgrep dnsmasq >/dev/null 2>&1 || pidof dnsmasq >/dev/null 2>&1; then
+if proc_running dnsmasq; then
   log "OK   [netd] dnsmasq already running - not touching it"
 else
   if [ -x "$DNSMASQ_BIN" ]; then
-    mkdir -p "$(dirname "$DNSMASQ_LEASES")" 2>/dev/null
+    mkdir -p "${DNSMASQ_LEASES%/*}" 2>/dev/null
     # --keep-in-foreground is NOT used here: we want it daemonised.
     # --no-resolv: upstream DNS comes from the WAN side / --server if set.
     "$DNSMASQ_BIN" \
@@ -175,9 +182,9 @@ wan_has_ip() {
 at() {
   # usage: at "AT+CMD"   - write to smd11, read best-effort reply (busybox).
   [ -c "$SMD" ] || { log "WARN $SMD not a char device - cannot dial"; return 1; }
-  printf '%s\r' "$1" > "$SMD" 2>/dev/null
+  busybox printf '%s\r' "$1" > "$SMD" 2>/dev/null
   # Best-effort short read so the modem has time to process; non-fatal.
-  dd if="$SMD" bs=256 count=1 iflag=nonblock 2>/dev/null | tr -d '\0'
+  busybox dd if="$SMD" bs=256 count=1 iflag=nonblock 2>/dev/null | busybox tr -d "\0"
   return 0
 }
 if wan_has_ip; then

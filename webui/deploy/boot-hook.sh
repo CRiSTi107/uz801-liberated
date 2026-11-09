@@ -7,6 +7,9 @@ LOG=/data/webui/boot-hook.log
   echo "=== boot-hook $(date 2>/dev/null) ==="
   # (decommissioned) old unauth :8088 shim no longer started — cockpit :443 replaces it
   /system/bin/sh /data/webui/harden.sh
+  # Network plumbing takeover (idempotent no-op while the stock app/netd run it;
+  # brings hostapd/dnsmasq/NAT up itself once the stock app is removed).
+  [ -f /data/webui/uz-netservices.sh ] && /system/bin/sh /data/webui/uz-netservices.sh
   # Alpine chroot services: SSH + cockpit API (+ tailscale/adguard when configured)
   [ -f /data/linux/start-services.sh ] && /system/bin/sh /data/linux/start-services.sh
   echo "=== boot-hook done ==="
