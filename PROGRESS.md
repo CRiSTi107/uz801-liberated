@@ -15,7 +15,20 @@ Living log of day-to-day steps is in [`README.md`](README.md); deep docs are lin
 deployed & auto-starting on boot, SSH + USB-ADB root lifelines working, everything committed
 & pushed (`origin` = private `uz801-liberated`). See §5 for the full status table.
 
-**2026-11-09 NEWEST — on-device DIAG band-lock (Route B) is a confirmed DEAD END.** Built
+**2026-11-09 NEWEST ✅ — Route A (QMI band-lock) WORKS; READ done, SET is owner-gated.** After
+Route B (DIAG) proved dead, **Route A succeeded**: qmuxd holds `/dev/smdcntl0..7` but **`smdcntl8`
+is free** — opening it and speaking standard **QMUX/QMI** gives a parallel QMI control point.
+Tools `diag/qmi_probe.py` + `qmi_bandpref.py` + `qmi_bandlock.py`. **READ:** modem's
+`lte_band_pref = 0x000007ff5bdf3fff` (**all B1–B43 enabled** → free to roam), and RF Band Info
+shows it **camped on EARFCN 6425 = Band 20** (the unusable 800 MHz band — exact failure caught).
+**PLANNED WRITE:** QMI NAS Set System Selection Preference (0x0033), lte_band_pref →
+`0x0000008000000095` = **{B1,B3,B5,B8,B40}**, change_duration = **POWER_CYCLE (runtime, reverts
+on reboot, no NV write, zero brick risk)**, re-applied each boot. `qmi_bandlock.py` is **dry-run by
+default**; the `--apply` SET is **gated on explicit owner go**. ▶ NEXT: on go, run `--apply`, then
+re-read + Get RF Band Info to confirm B20 is dropped; then wire the re-apply into `boot-hook.sh`.
+Details: [`BANDLOCK-LINUX-PLAN.md`](BANDLOCK-LINUX-PLAN.md).
+
+**2026-11-09 — on-device DIAG band-lock (Route B) is a confirmed DEAD END.** Built
 `diag/qcdiag_efs.py` (EFS2 + legacy NV_READ over the proven `/dev/diag` transport). The transport
 works, but this modem's diag is **locked to info-only**: it answers version/build-id + EFS2
 HELLO/QUERY, and **silently drops every config-access command** — EFS2 STAT/STATFS/OPEN/READ,

@@ -44,6 +44,28 @@ stops hopping to the strong-but-unusable B20/B7 and stays registered on B1/B3.
     earlier live data suggested the real blocker is intermittent **EMM attach failure**, not band
     choice — so band-lock likely wouldn't have fixed it even if Route B had worked.
 
+## ✅ ROUTE A IS LIVE (2026-11-09) — QMI over a free SMD channel works
+After Route B (DIAG) proved a dead end, Route A succeeded:
+- **Transport:** qmuxd holds `/dev/smdcntl0..7`; **`smdcntl8` (and `9`) are root-owned and
+  unused by qmuxd**. Opening `smdcntl8` and speaking **standard QMUX/QMI** gives a parallel QMI
+  control point (modem sends a QMI_CTL SYNC indication 0x0027 on connect). Tools:
+  `diag/qmi_probe.py` (channel finder), `diag/qmi_bandpref.py` (read), `diag/qmi_bandlock.py`
+  (set, dry-run default). The chroot needs the node: `mknod /dev/smdcntl8 c 244 8`.
+- **READ (qmi_bandpref.py):** allocated NAS client, QMI_NAS Get System Selection Preference
+  (0x0034) →
+  - `mode_pref = 0x0010` (LTE-only already),
+  - **`lte_band_pref = 0x000007ff5bdf3fff`** = **all of B1–B43 enabled** (why it roams onto B20/B7),
+  - Get RF Band Info (0x0031) → serving **EARFCN 6425 = Band 20 (800 MHz, unusable)** — caught it
+    camped on B20, the exact failure.
+- **PLAN the write:** QMI_NAS **Set System Selection Preference (0x0033)**, TLV 0x14
+  `lte_band_pref = 0x0000008000000095` = **{B1,B3,B5,B8,B40}**, TLV 0x17 `change_duration = 0x00`
+  (**POWER_CYCLE = runtime, reverts on reboot, NO NV write, zero brick risk**). Re-apply each boot
+  from the boot-hook. Dry-run SET frame (verified bytes):
+  `011b0000030200010033000f00140800950000008000000017010000`.
+- **Status:** read done; **the --apply SET is gated on explicit owner go** (per "stop before any
+  WRITE" — though this write is runtime, not NV). After apply: re-read + Get RF Band Info to
+  confirm the modem drops B20 and re-camps on B1/B3.
+
 ## Why this is non-trivial (recap)
 - **No AT band-lock verb** on this modem (confirmed: `$QCBANDPREF` is 2G/3G-only; `!BAND`/
   `^SETBAND`/`^SYSCFGEX`/`$QCRAT` all ERROR).
