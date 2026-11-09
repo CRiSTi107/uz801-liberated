@@ -51,6 +51,25 @@ Asked to "make sure I have everything before deleting the Chinese backdoor apps.
   (netd client) rather than launching the daemons directly, then re-run this rehearsal. App stays
   (decommissioned/firewalled — the backdoor is already neutralized) until that's proven.
 
+### ndc SoftAP takeover — built + tested → PARTIAL (DHCP works, WiFi radio doesn't)
+Extracted the exact KitKat netd syntax from `strings /system/bin/netd`:
+`softap fwreload <iface> <AP|P2P|STA>`, `softap set <iface> <ssid> <hidden/broadcast> <channel>
+<wpa2-psk|open> <passphrase>`, `softap startap`, `tether start <lo> <hi>`. Verified `ndc softap
+fwreload/set` accepted live. Rewrote `uz-netservices.sh` steps 3-4 to use `ndc` (reads ssid/chan/
+sec/key from `hostapd.conf`). Rehearsal (app `pm disable`d + reboot):
+- ✅ **`ndc tether` → `dnsmasq`/DHCP up** (PC got a lease `…175`, cockpit 200, SSH up).
+- ⚠️ `ndc softap startap` starts the hostapd *process*, but the **radio isn't a usable AP**:
+  `ndc softap fwreload` returns `400 ... failed` at boot, `/sys/module/wlan/parameters/fwpath`
+  is **empty/missing** (WLAN driver not loaded in AP mode), and **`wlan0` is not in `br0`**.
+  On restore (app re-enabled) the stock path brings `fwpath=ap` + hostapd ~25 s post-boot.
+- **Root cause / remaining work:** the stock app/netd **load the WLAN kernel driver in AP mode**
+  and bridge `wlan0`→`br0` as part of SoftAP bring-up — the hard, driver-level step that `ndc
+  softap` alone doesn't do standalone at boot. Until that's replicated, wireless clients break
+  if the app is removed. Re-enabled + rebooted → fully restored.
+- **Decision:** keep the app (decommissioned/firewalled — backdoor already dead). The driver-level
+  AP-mode load is deep/fragile RE for zero security gain; deprioritized. `uz-netservices.sh` keeps
+  the working `ndc tether` path + a documented TODO for the WLAN driver load.
+
 ---
 
 ## Session 2026-11-07 → 2026-11-09 — SMS fast-fail, band-lock feature, live signal diagnosis

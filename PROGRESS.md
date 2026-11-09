@@ -49,13 +49,16 @@ is unusable B20) → SMS/calls/data don't work yet. **Not software-fixable** —
    Run a performance/stress test to diagnose (hostapd stability/logs, channel/interference,
    throughput soak via iperf3, many-client test, thermal/CPU, USB-gadget contention). Keep the
    USB-ADB + SSH lifelines up; never restart adbd during the test.
-4. *(BLOCKED — dress rehearsal 2026-11-09 FAILED)* **Delete the stock app**: the reversible
-   `pm disable` + reboot test proved the app is **required for the WiFi-AP + DHCP bring-up** —
-   with it disabled, `hostapd`/`dnsmasq` don't start and `uz-netservices.sh` can't start them
-   (SoftAP needs **netd** interface/mode orchestration, not a bare `hostapd -B`). App re-enabled,
-   fully restored. **Before any delete, rewrite the takeover to use `ndc softap`/`ndc tether`
-   (drive netd), then re-run the rehearsal.** The app stays (decommissioned/firewalled) until then.
-   Lifelines, APK backup (`/data/backups`), and EDL restore set are all in place.
+4. *(BLOCKED — driver-level piece unsolved)* **Delete the stock app**: two rehearsals done.
+   The `ndc`-based takeover (`uz-netservices.sh`) now gets **DHCP/`dnsmasq` up via `ndc tether`
+   ✅** and cockpit/SSH/LAN-over-USB survive the app being disabled — **but the WiFi *radio* does
+   not**: the stock app/netd **load the WLAN kernel driver in AP mode** (`fwpath=ap`) and bridge
+   `wlan0`→`br0`; standalone `ndc softap fwreload` fails at boot (driver not loaded), so wireless
+   clients wouldn't work with the app gone. ⇒ **not cleanly deletable yet.** Remaining work =
+   replicate the **WLAN-driver AP-mode load + `wlan0`→`br0` bridge** (find how it's `insmod`/loaded
+   at boot). Lifelines, APK backup (`/data/backups`), EDL restore set all in place. Since the
+   backdoor is already neutralized (decommissioned/firewalled), keeping the app is zero-cost
+   security-wise — this is completeness-only and low priority.
 
 To resume on another PC: `git pull`, read `CLAUDE.md` + this block, connect to the device
 (`adb -s 0123456789ABCDEF` / cockpit `https://192.168.100.1` / `ssh root@192.168.100.1`;

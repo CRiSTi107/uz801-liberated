@@ -46,6 +46,8 @@ DNSMASQ_BIN="${DNSMASQ_BIN:-/system/bin/dnsmasq}"
 DNSMASQ_LEASES="${DNSMASQ_LEASES:-/data/misc/dhcp/dnsmasq.leases}"
 
 IPTABLES="${IPTABLES:-/system/bin/iptables}"
+NDC="${NDC:-/system/bin/ndc}"    # netd client - drives SoftAP + tethering like the framework
+AP_IFACE="${AP_IFACE:-wlan0}"
 SMD="${SMD:-/dev/smd11}"
 APN="${APN:-internet}"          # data APN to dial as a last-resort fallback
 PDP_CID="${PDP_CID:-1}"
@@ -59,6 +61,10 @@ proc_running() {
   p="[${1%"${1#?}"}]${1#?}"
   busybox ps -o args 2>/dev/null | busybox grep -qE "$p"
 }
+# Run an ndc command and log each line of its reply (prefixed).
+ndcrun() { "$NDC" "$@" 2>&1 | while IFS= read -r _l; do log "  ndc: $_l"; done; }
+# Read a key=value from the hostapd.conf (first match).
+hconf() { busybox grep -m1 "^$1=" "$HOSTAPD_CONF" 2>/dev/null | busybox cut -d= -f2-; }
 
 log "starting (WAN=$WAN_IFACE LAN=$LAN_IFACE LAN_IP=$LAN_IP)"
 
@@ -120,55 +126,59 @@ else
 fi
 
 # ===========================================================================
-# 3. hostapd: (re)start WiFi AP with the existing conf. netd usually owns this
-#    - if a hostapd is already running we LEAVE IT ALONE (idempotent).
+# 3. WiFi AP via netd (`ndc softap`).
+#    STATUS (tested 2026-11-09, app disabled + reboot): PARTIAL. `ndc softap
+#    set/startap` run and hostapd comes up, BUT the AP is not usable by wireless
+#    clients on its own — the stock app/netd also LOAD the WLAN kernel driver in
+#    AP mode (so /sys/module/wlan/parameters/fwpath=ap) and bridge wlan0 into
+#    br0, and our standalone `ndc softap fwreload` fails at boot (driver not
+#    loaded → fwpath missing). So WiFi-client association does NOT work with the
+#    stock app removed yet. The `ndc tether` / dnsmasq path (step 4) DOES work.
+#    TODO before the app can be deleted: replicate the WLAN-driver AP-mode load
+#    + wlan0→br0 bridge (the hard, driver-level part).
+#    A bare `hostapd -B` is NOT enough: the
+#    WCN3620 must first be switched to AP-mode firmware (/sys/module/wlan/
+#    parameters/fwpath=ap) and the interface put in AP mode - that is netd's
+#    job, driven by the framework. We replicate exactly what the stock app
+#    triggers: fwreload AP -> set (ssid/hidden/channel/security/key, read from
+#    the existing hostapd.conf) -> startap. Idempotent: skip if hostapd is up.
 # ===========================================================================
 if proc_running hostapd; then
   log "OK   [netd] hostapd already running - not touching it"
-else
-  if [ -x "$HOSTAPD_BIN" ] && [ -f "$HOSTAPD_CONF" ]; then
-    if [ -f "$HOSTAPD_ENTROPY" ]; then
-      "$HOSTAPD_BIN" -B -e "$HOSTAPD_ENTROPY" "$HOSTAPD_CONF" \
-        >/dev/null 2>&1 \
-        && log "START hostapd -e $HOSTAPD_ENTROPY $HOSTAPD_CONF" \
-        || log "FAIL hostapd did not start"
-    else
-      "$HOSTAPD_BIN" -B "$HOSTAPD_CONF" >/dev/null 2>&1 \
-        && log "START hostapd $HOSTAPD_CONF (no entropy file)" \
-        || log "FAIL hostapd did not start"
-    fi
+elif have "$NDC"; then
+  ap_ssid="$(hconf ssid)"; ap_chan="$(hconf channel)"; ap_pass="$(hconf wpa_passphrase)"
+  [ "$(hconf wpa)" = "2" ] && ap_sec="wpa2-psk" || { [ -n "$ap_pass" ] && ap_sec="wpa2-psk" || ap_sec="open"; }
+  [ "$(hconf ignore_broadcast_ssid)" = "1" ] && ap_bcast="hidden" || ap_bcast="broadcast"
+  [ -z "$ap_chan" ] && ap_chan="6"
+  log "SOFTAP fwreload $AP_IFACE AP; set '$ap_ssid' $ap_bcast ch$ap_chan $ap_sec; startap"
+  ndcrun softap fwreload "$AP_IFACE" AP
+  if [ "$ap_sec" = "open" ]; then
+    ndcrun softap set "$AP_IFACE" "$ap_ssid" "$ap_bcast" "$ap_chan" open
   else
-    log "WARN hostapd bin ($HOSTAPD_BIN) or conf ($HOSTAPD_CONF) missing"
+    ndcrun softap set "$AP_IFACE" "$ap_ssid" "$ap_bcast" "$ap_chan" "$ap_sec" "$ap_pass"
   fi
+  ndcrun softap startap
+  sleep 2
+  proc_running hostapd && log "OK   AP up via ndc softap" || log "FAIL AP did not come up via ndc softap"
+else
+  log "WARN ndc not found at $NDC - cannot start SoftAP"
 fi
 
 # ===========================================================================
-# 4. dnsmasq: DHCP + DNS for the LAN bridge. netd usually owns this - if a
-#    dnsmasq is already running we LEAVE IT ALONE. Otherwise start one with a
-#    sane range and gateway/DNS = the dongle itself.
+# 4. DHCP/DNS via netd (`ndc tether`). netd launches dnsmasq for the tethered
+#    LAN with the given range. Idempotent: skip if dnsmasq is already up.
 # ===========================================================================
 if proc_running dnsmasq; then
   log "OK   [netd] dnsmasq already running - not touching it"
+elif have "$NDC"; then
+  mkdir -p "${DNSMASQ_LEASES%/*}" 2>/dev/null
+  log "TETHER start $DHCP_START $DHCP_END; interface add $LAN_IFACE"
+  ndcrun tether start "$DHCP_START" "$DHCP_END"
+  ndcrun tether interface add "$LAN_IFACE"
+  sleep 2
+  proc_running dnsmasq && log "OK   dnsmasq up via ndc tether" || log "FAIL dnsmasq did not come up via ndc tether"
 else
-  if [ -x "$DNSMASQ_BIN" ]; then
-    mkdir -p "${DNSMASQ_LEASES%/*}" 2>/dev/null
-    # --keep-in-foreground is NOT used here: we want it daemonised.
-    # --no-resolv: upstream DNS comes from the WAN side / --server if set.
-    "$DNSMASQ_BIN" \
-      --interface="$LAN_IFACE" \
-      --bind-interfaces \
-      --except-interface=lo \
-      --dhcp-range="$DHCP_START,$DHCP_END,$DHCP_LEASE" \
-      --dhcp-option=3,"$LAN_IP" \
-      --dhcp-option=6,"$LAN_IP" \
-      --dhcp-leasefile="$DNSMASQ_LEASES" \
-      --listen-address="$LAN_IP" \
-      >/dev/null 2>&1 \
-      && log "START dnsmasq on $LAN_IFACE ($DHCP_START-$DHCP_END, gw/dns $LAN_IP)" \
-      || log "FAIL dnsmasq did not start"
-  else
-    log "WARN dnsmasq not found at $DNSMASQ_BIN - skipping DHCP/DNS step"
-  fi
+  log "WARN ndc not found at $NDC - cannot start DHCP"
 fi
 
 # ===========================================================================
