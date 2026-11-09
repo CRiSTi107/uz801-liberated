@@ -136,8 +136,10 @@ class Qmi:
 
 def main():
     apply = "--apply" in sys.argv
-    # SET request TLVs: 0x14 lte_band_pref (u64), 0x17 change_duration (u8)
-    set_tlvs = (struct.pack('<BHQ', 0x14, 8, TARGET_MASK)
+    # SET request TLVs: 0x15 lte_band_pref (u64), 0x17 change_duration (u8).
+    # NOTE: this modem (Longsung/Huawei) uses TLV 0x15 for the SET band pref,
+    # not the libqmi-standard 0x14 (0x14/0x10 both return MALFORMED_MSG here).
+    set_tlvs = (struct.pack('<BHQ', 0x15, 8, TARGET_MASK)
                 + struct.pack('<BHB', 0x17, 1, CHANGE_POWER_CYCLE))
 
     print("Target lte_band_pref = 0x%016x  %s" % (TARGET_MASK, decode(TARGET_MASK)))

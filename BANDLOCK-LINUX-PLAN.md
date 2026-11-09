@@ -57,14 +57,25 @@ After Route B (DIAG) proved a dead end, Route A succeeded:
   - **`lte_band_pref = 0x000007ff5bdf3fff`** = **all of B1–B43 enabled** (why it roams onto B20/B7),
   - Get RF Band Info (0x0031) → serving **EARFCN 6425 = Band 20 (800 MHz, unusable)** — caught it
     camped on B20, the exact failure.
-- **PLAN the write:** QMI_NAS **Set System Selection Preference (0x0033)**, TLV 0x14
-  `lte_band_pref = 0x0000008000000095` = **{B1,B3,B5,B8,B40}**, TLV 0x17 `change_duration = 0x00`
-  (**POWER_CYCLE = runtime, reverts on reboot, NO NV write, zero brick risk**). Re-apply each boot
-  from the boot-hook. Dry-run SET frame (verified bytes):
-  `011b0000030200010033000f00140800950000008000000017010000`.
-- **Status:** read done; **the --apply SET is gated on explicit owner go** (per "stop before any
-  WRITE" — though this write is runtime, not NV). After apply: re-read + Get RF Band Info to
-  confirm the modem drops B20 and re-camps on B1/B3.
+- **✅ WRITE APPLIED & VERIFIED (owner-approved):** QMI_NAS **Set System Selection Preference
+  (0x0033)** with `lte_band_pref = 0x0000008000000095` = **{B1,B3,B5,B8,B40}**, change_duration
+  `0x17 = 0x00` (**POWER_CYCLE = runtime, reverts on reboot, NO NV write, zero brick risk**).
+  - **Modem-specific TLV id:** this Longsung/Huawei modem takes lte_band_pref at **TLV 0x15** for
+    the SET (same as GET), **not** the libqmi-standard 0x14. `0x14`, `0x10+0x14`, and the 16-byte
+    `0x1D` all return **MALFORMED_MSG (err 1)**; only **`0x15 + 0x17`** returns result (0,0)
+    SUCCESS. Accepted SET frame: `011b0000030200010033000f00150800950000008000000017010000`.
+    (`diag/qmi_bandset_probe.py` found this empirically; `diag/qmi_bandlock.py` now uses 0x15.)
+  - **Result:** read-back `lte_band_pref = 0x0000008000000095` ✓. Serving band moved off B20
+    immediately to **B1 (EARFCN 525)**; a 5× poll showed it holding on **B1/B8 only** (EARFCN 525
+    & 3650) and **never returning to B20/B7**. The band-lock works and holds.
+  - **BUT registration is still `SEARCHING`** on the usable bands (QMI Get Serving System 0x24 =
+    SEARCHING across a 12 s poll; no serving-cell signal to measure). ⇒ the band-lock is correct
+    and necessary, but the **real blocker is signal** — the modem can't attach on B1/B3/B5/B8/B40
+    because the usable cells are too weak. This is the **antenna** problem (see `ANTENNA.md`),
+    exactly as predicted; band-lock alone does not restore service.
+- **Persistence:** the lock is runtime (reverts on reboot). To keep it, re-run
+  `qmi_bandlock.py --apply` from `webui/deploy/boot-hook.sh` each boot (needs
+  `mknod /dev/smdcntl8 c 244 8` in the chroot first). **Not yet wired** — offered as next step.
 
 ## Why this is non-trivial (recap)
 - **No AT band-lock verb** on this modem (confirmed: `$QCBANDPREF` is 2G/3G-only; `!BAND`/
