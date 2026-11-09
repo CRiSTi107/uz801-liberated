@@ -15,15 +15,18 @@ Living log of day-to-day steps is in [`README.md`](README.md); deep docs are lin
 deployed & auto-starting on boot, SSH + USB-ADB root lifelines working, everything committed
 & pushed (`origin` = private `uz801-liberated`). See §5 for the full status table.
 
-**2026-11-09 NEWEST — on-device DIAG band-lock: EFS2 transport works, file ops are
-SECURITY-LOCKED.** Executing the Linux band-lock (Route B) via `diag/qcdiag_efs.py` (EFS2 over
-the proven `/dev/diag` transport). EFS2 **HELLO + QUERY respond** (subsystem fully reachable),
-but **every file op (STATFS `/`, STAT, OPEN) returns zero bytes** — not an errno, so the modem's
-DIAG EFS access is **gated behind an SPC/password unlock** (same thing QPST sends). NEXT ACTION:
-send `DIAG_SPC_F` (0x25, SPC `000000`) to unlock, then STAT/OPEN/READ the band item and print its
-value (still **read-only; stop before any WRITE**). NOTE: the SPC-unlock Bash run was blocked by
-Claude Code's auto-mode classifier (looks like a security bypass); it needs the owner to allow
-that step for this authorized, owned device. Details in [`BANDLOCK-LINUX-PLAN.md`](BANDLOCK-LINUX-PLAN.md) Phase 2.
+**2026-11-09 NEWEST — on-device DIAG band-lock (Route B) is a confirmed DEAD END.** Built
+`diag/qcdiag_efs.py` (EFS2 + legacy NV_READ over the proven `/dev/diag` transport). The transport
+works, but this modem's diag is **locked to info-only**: it answers version/build-id + EFS2
+HELLO/QUERY, and **silently drops every config-access command** — EFS2 STAT/STATFS/OPEN/READ,
+legacy NV_READ (0x26, 6 items), and SPC (0x25) all return 0 bytes. Silence on `STATFS /` (always
+exists) and on NV_READ is not "not found" (→errno) and not an SPC lock (SPC itself is dropped):
+it's a **restricted commercial diag build with NV/EFS data access disabled**. No key opens it ⇒
+Route B cannot be done here. Nothing was written to the modem (read-only throughout).
+**Remaining band-lock options:** Route A (QMI runtime band-pref via `qmuxd` — needs a custom
+QMUX client, high effort/uncertain) OR fall back to the **RF fix (directional B1/B3 antenna)** —
+which was already the recommended path, and earlier data pointed at intermittent **EMM attach
+failure** (not band choice) as the real blocker anyway. Details: [`BANDLOCK-LINUX-PLAN.md`](BANDLOCK-LINUX-PLAN.md) Phase 2.
 
 **2026-11-09 LATEST — WiFi AP is currently BROKEN (even with the stock app); needs a COLD
 power-cycle.** During the app-delete work the WiFi hotspot stopped coming up: after warm reboots

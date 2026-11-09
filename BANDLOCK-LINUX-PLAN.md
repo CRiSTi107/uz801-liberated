@@ -18,21 +18,31 @@ stops hopping to the strong-but-unusable B20/B7 and stays registered on B1/B3.
   `DIAG_IOCTL_SWITCH_LOGGING`=7 needs the **struct arg** `pack('<iiii',MEMORY_DEVICE_MODE,0,-1,0)`
   (int form → EFAULT); write = `pack('<I',0x20)` + HDLC(payload); HDLC FCS = reflected 0x8408.
   `/dev/diag` must be bind-mounted into the chroot (done live; add to `enter.sh` when we commit to it).
-- **Phase 2 🟡 IN PROGRESS** — `diag/qcdiag_efs.py` implements EFS2 over the proven transport
-  (SUBSYS 0x4B / subsys 0x13). **Findings (2026-11-09):**
-  - EFS2 **HELLO (subcmd 0)** and **QUERY (subcmd 1)** respond cleanly
-    (QUERY → `4b 13 01 00 03 00 00 00 ...` = version 3, limits). Transport + subsystem routing
-    are 100% working.
-  - **Every file-access subcommand is silently dropped** — `STATFS /` (root always exists),
-    `STAT /nv`, `STAT <path>`, and `OPEN <path>` all return **zero bytes** (not an errno).
-    A missing file would return an errno; silence on `STATFS /` means the ops are **gated**,
-    not failing. ⇒ **the modem's DIAG EFS file access is security-locked** (info cmds allowed,
-    FS cmds blocked until an SPC/password unlock — the same unlock QPST sends transparently).
-  - **Next:** send the **SPC unlock** (`DIAG_SPC_F` 0x25, SPC `000000`/`00000000`; maybe also
-    `DIAG_PASSWORD_F`) to open EFS, then `STAT`/`OPEN`/`READ` the band item, print its value.
-    (The `security unlock` run was blocked by Claude Code's auto-mode classifier as it resembles
-    a security-bypass — needs the user to allow that Bash step for this authorized, owned device.)
-  - **Still read-only; stop before any WRITE.**
+- **Phase 2 ❌ DEAD END — Route B not feasible on this modem (2026-11-09).**
+  `diag/qcdiag_efs.py` implements EFS2 (SUBSYS 0x4B / subsys 0x13) + legacy NV_READ (0x26) over
+  the proven transport. The transport is 100% working, but the modem's diag is **locked down to
+  info-only**:
+  | Command class | Example | Responds? |
+  |---|---|---|
+  | Version / build info | `0x00`, `0x7c` | ✅ |
+  | EFS2 capability | HELLO (0), QUERY (1) | ✅ (QUERY → `4b 13 01 00 03…` v3+limits) |
+  | EFS2 **file I/O** | STAT(15), STATFS(19), OPEN(2), READ(4) | ❌ **silent (0 bytes)** |
+  | **Legacy NV** | NV_READ `0x26` (items 10/71/85/441/946/2954) | ❌ **silent** |
+  | SPC unlock | `DIAG_SPC_F` 0x25 (`000000`/`00000000`) | ❌ **silent** |
+
+  Silence on `STATFS /` (root always exists) and on every NV_READ is **not** "file not found"
+  (that returns an errno) and **not** an SPC lock (SPC 0x25 itself is dropped) — it is a
+  **restricted commercial diag build with NV/EFS data access compiled out / disabled**. Only the
+  capability/logging subset is live. **No key opens this**, so Route B (DIAG NV/EFS band write)
+  cannot be done on this device. Nothing was written to the modem; this stayed read-only throughout.
+- **Remaining options (both away from DIAG):**
+  - **Route A — QMI runtime band-pref via `qmuxd`** (reversible, re-applied each boot). Still
+    unexplored; needs a small QMUX/QMI client to `/dev/socket/qmux_*` (no FOSS client targets
+    qmuxd). High effort, uncertain.
+  - **Fall back to the RF fix** — directional B1/B3 antenna (+ optional 800 MHz notch), the
+    hardware path in `ANTENNA.md`/`CAPABILITIES.md`. This was already the recommended fix, and
+    earlier live data suggested the real blocker is intermittent **EMM attach failure**, not band
+    choice — so band-lock likely wouldn't have fixed it even if Route B had worked.
 
 ## Why this is non-trivial (recap)
 - **No AT band-lock verb** on this modem (confirmed: `$QCBANDPREF` is 2G/3G-only; `!BAND`/

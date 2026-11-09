@@ -169,19 +169,23 @@ CANDIDATES = [
     "/nv/item_files/modem/lte/rrc/cap/band_prior_list",
     "/nv/item_files/modem/mmode/band_pref",
 ]
-# Hypothesis: EFS file ops are diag-security-locked. Try SPC unlock then retry.
-print("security unlock attempts:")
-DIAG_SPC_F = 0x25
-for spc in (b"000000", b"00000000"):
-    r, _ = d.raw_cmd(bytes([DIAG_SPC_F]) + spc)
-    print("  SPC %-10s -> %s" % (spc.decode(), (r.hex() if r else None)))
-# retry STAT/OPEN after unlock
-for name, code, pl in [
-    ("STAT /nv", EFS_STAT, b"/nv\x00"),
-    ("STATFS /", EFS_STATFS, b"/\x00"),
-]:
-    r, _ = d.subsys(code, pl)
-    print("  post-unlock %-10s -> %s" % (name, (r.hex() if r else None)))
+# EFS2 file I/O is silently dropped (commercial diag build). Probe the LEGACY
+# numbered-NV interface instead (DIAG_NV_READ_F 0x26) — read-only.
+print("legacy NV_READ probe (read-only, 0x26):")
+DIAG_NV_READ_F = 0x26
+# Request: cmd(0x26) + item(uint16 LE) + 128 bytes NV data area (zeros for read)
+# Response: cmd(0x26) + item(2) + 128 data + status(2)
+for item in (10, 71, 85, 441, 946, 2954):  # benign/mixed items incl. band-pref
+    req = bytes([DIAG_NV_READ_F]) + struct.pack('<H', item) + (b'\x00' * 128)
+    r, _ = d.raw_cmd(req)
+    if r and len(r) >= 3 and r[0] == DIAG_NV_READ_F:
+        ritem, = struct.unpack('<H', r[1:3])
+        status = struct.unpack('<H', r[131:133])[0] if len(r) >= 133 else -1
+        data = r[3:131]
+        print("  NV %-5d -> item=%d status=%d data=%s"
+              % (item, ritem, status, data[:24].hex()))
+    else:
+        print("  NV %-5d -> %s" % (item, (r.hex() if r else None)))
 
 print("try candidate band files (read-only):")
 for path in CANDIDATES:
