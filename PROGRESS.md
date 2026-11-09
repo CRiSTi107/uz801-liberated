@@ -15,6 +15,17 @@ Living log of day-to-day steps is in [`README.md`](README.md); deep docs are lin
 deployed & auto-starting on boot, SSH + USB-ADB root lifelines working, everything committed
 & pushed (`origin` = private `uz801-liberated`). See §5 for the full status table.
 
+**2026-11-09 LATEST — WiFi AP is currently BROKEN (even with the stock app); needs a COLD
+power-cycle.** During the app-delete work the WiFi hotspot stopped coming up: after warm reboots
+`wlan0` stays DOWN, never joins `br0`, `dnsmasq`/tether wedge (kernel: `wlan: link not ready`).
+This is the owner-reported "AP drops" instability, now fully down, likely aggravated by extensive
+disable/enable/`ndc`/reboot testing wedging netd's WiFi state machine. **USB/cockpit/SSH/cellular
+are all fine.** FIRST ACTION on resume: **physically unplug+replug the dongle** (warm reboots don't
+reset the WCNSS WiFi firmware), then check `wlan0` comes up as an AP (`diag/wifi-watch.sh`, or
+`cat /sys/class/net/wlan0/operstate` + `ls /sys/class/net/br0/brif/`). The `ndc` SoftAP takeover
+(`uz-netservices.sh`: insmod wlan.ko→fwpath=ap→ndc softap→brctl addif→ndc tether) is CODE-COMPLETE
+and waits for a healthy WiFi subsystem. Delete-the-app is blocked until WiFi works again.
+
 **2026-11-09 update — software band-lock RULED OUT, diagnostics added.** The NV/QMI band-lock
 is **not cleanly feasible on this modem**: no AT band-lock verb; `libqmi`/`qmicli` can't reach
 it (internal modem over SMD+`qmuxd`, no `cdc-wdm`/QRTR); NV 65633 `lte_bc_config` is EFS-only via

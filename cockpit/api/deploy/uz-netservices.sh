@@ -48,6 +48,8 @@ DNSMASQ_LEASES="${DNSMASQ_LEASES:-/data/misc/dhcp/dnsmasq.leases}"
 IPTABLES="${IPTABLES:-/system/bin/iptables}"
 NDC="${NDC:-/system/bin/ndc}"    # netd client - drives SoftAP + tethering like the framework
 AP_IFACE="${AP_IFACE:-wlan0}"
+WLAN_KO="${WLAN_KO:-/system/lib/modules/wlan.ko}"  # the framework insmods this for WiFi
+BRCTL="${BRCTL:-/system/bin/brctl}"
 SMD="${SMD:-/dev/smd11}"
 APN="${APN:-internet}"          # data APN to dial as a last-resort fallback
 PDP_CID="${PDP_CID:-1}"
@@ -143,23 +145,48 @@ fi
 #    triggers: fwreload AP -> set (ssid/hidden/channel/security/key, read from
 #    the existing hostapd.conf) -> startap. Idempotent: skip if hostapd is up.
 # ===========================================================================
-if proc_running hostapd; then
-  log "OK   [netd] hostapd already running - not touching it"
+if proc_running hostapd && [ -e "/sys/class/net/$AP_IFACE/brport" ]; then
+  log "OK   hostapd already running and $AP_IFACE bridged - not touching it"
 elif have "$NDC"; then
+  # 3a. Load the WLAN driver if nothing has. The stock app does this via the
+  #     framework's insmod; without it /sys/module/wlan + wlan0 don't exist and
+  #     `softap fwreload` fails. The chip firmware itself is already up (the init
+  #     service wcnss-service runs at boot, independent of the app).
+  if [ ! -d /sys/module/wlan ]; then
+    log "INSMOD $WLAN_KO"
+    insmod "$WLAN_KO" 2>&1 | while IFS= read -r _l; do log "  insmod: $_l"; done
+    i=0; while [ "$i" -lt 15 ] && [ ! -e "/sys/class/net/$AP_IFACE" ]; do busybox sleep 1; i=$((i+1)); done
+    log "  $AP_IFACE present after insmod: $([ -e "/sys/class/net/$AP_IFACE" ] && echo yes || echo NO)"
+  fi
+  # 3b. Select AP-mode firmware (fwpath=ap) + fwreload via netd as a backup.
+  [ -e /sys/module/wlan/parameters/fwpath ] && \
+    { echo ap > /sys/module/wlan/parameters/fwpath 2>/dev/null && log "SET fwpath=ap"; }
+  ndcrun softap fwreload "$AP_IFACE" AP
+  busybox ifconfig "$AP_IFACE" up 2>/dev/null
+  # 3c. Configure + start hostapd via netd.
   ap_ssid="$(hconf ssid)"; ap_chan="$(hconf channel)"; ap_pass="$(hconf wpa_passphrase)"
   [ "$(hconf wpa)" = "2" ] && ap_sec="wpa2-psk" || { [ -n "$ap_pass" ] && ap_sec="wpa2-psk" || ap_sec="open"; }
   [ "$(hconf ignore_broadcast_ssid)" = "1" ] && ap_bcast="hidden" || ap_bcast="broadcast"
   [ -z "$ap_chan" ] && ap_chan="6"
-  log "SOFTAP fwreload $AP_IFACE AP; set '$ap_ssid' $ap_bcast ch$ap_chan $ap_sec; startap"
-  ndcrun softap fwreload "$AP_IFACE" AP
+  log "SOFTAP set '$ap_ssid' $ap_bcast ch$ap_chan $ap_sec; startap"
   if [ "$ap_sec" = "open" ]; then
     ndcrun softap set "$AP_IFACE" "$ap_ssid" "$ap_bcast" "$ap_chan" open
   else
     ndcrun softap set "$AP_IFACE" "$ap_ssid" "$ap_bcast" "$ap_chan" "$ap_sec" "$ap_pass"
   fi
   ndcrun softap startap
-  sleep 2
-  proc_running hostapd && log "OK   AP up via ndc softap" || log "FAIL AP did not come up via ndc softap"
+  busybox sleep 2
+  # 3d. Bridge the AP iface into the LAN bridge (hostapd.conf has no bridge= line).
+  if [ -e "/sys/class/net/$AP_IFACE" ] && [ ! -e "/sys/class/net/$AP_IFACE/brport" ]; then
+    "$BRCTL" addif "$LAN_IFACE" "$AP_IFACE" 2>&1 | while IFS= read -r _l; do log "  brctl: $_l"; done
+    log "BRIDGE addif $LAN_IFACE $AP_IFACE"
+  fi
+  busybox sleep 1
+  if proc_running hostapd && [ -e "/sys/class/net/$AP_IFACE/brport" ]; then
+    log "OK   AP up (hostapd) + $AP_IFACE bridged into $LAN_IFACE"
+  else
+    log "FAIL AP incomplete (hostapd=$(proc_running hostapd && echo y || echo n) bridged=$([ -e "/sys/class/net/$AP_IFACE/brport" ] && echo y || echo n))"
+  fi
 else
   log "WARN ndc not found at $NDC - cannot start SoftAP"
 fi
