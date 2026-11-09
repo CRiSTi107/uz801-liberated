@@ -161,6 +161,8 @@ class App:
                                          qmimod.DEFAULT_CHANNEL)
         self._band_maskfile = plat_cfg.get("band_maskfile",
                                            qmimod.DEFAULT_MASKFILE)
+        # serialize all QMI band ops (get/set/scan/boot) on the single channel
+        self._band_lock = threading.Lock()
         self._mock = mock
         self._start_time = time.time()
         self._sms_poll_seconds = cfg.get("sms_poll_seconds", 20)
@@ -186,7 +188,8 @@ class App:
         if mask is None:
             return
         try:
-            res = qmimod.apply_band(mask, self._qmi_channel)
+            with self._band_lock:
+                res = qmimod.apply_band(mask, self._qmi_channel)
             if res.get("ok"):
                 log.info("band-lock re-applied: %s %s",
                          res.get("mask_hex"), res.get("bands"))
@@ -825,7 +828,8 @@ class Handler(BaseHTTPRequestHandler):
         qread = {}
         if not self.app._mock:
             try:
-                qread = qmimod.read_band(self.app._qmi_channel)
+                with self.app._band_lock:
+                    qread = qmimod.read_band(self.app._qmi_channel)
             except Exception as exc:  # noqa: BLE001
                 qread = {"ok": False, "error": str(exc)}
         saved = qmimod.load_mask(self.app._band_maskfile)
@@ -881,8 +885,9 @@ class Handler(BaseHTTPRequestHandler):
         if mask == 0:
             raise ApiError(400, "no valid bands in %r" % (bands,))
         try:
-            res = qmimod.apply_band(mask, self.app._qmi_channel,
-                                    permanent=permanent)
+            with self.app._band_lock:
+                res = qmimod.apply_band(mask, self.app._qmi_channel,
+                                        permanent=permanent)
         except Exception as exc:  # noqa: BLE001
             raise ApiError(502, "QMI band set failed: %s" % exc)
         if not res.get("ok"):
@@ -895,6 +900,37 @@ class Handler(BaseHTTPRequestHandler):
         except OSError as exc:
             res["persisted"] = False
             res["persist_error"] = str(exc)
+        return res
+
+    def ep_band_scan(self, query, args, session):
+        """Sweep each usable band to find which have a reachable cell NOW.
+
+        Briefly locks each band (B1/B3/B5/B8/B40), reads whether a cell
+        appears + its RSRP, then restores the pre-scan lock. Disruptive and
+        slow (~20-30s; cellular data drops during the sweep). Body (optional):
+        {"dwell": 4} seconds per band.
+        """
+        if self.app._mock:
+            raise ApiError(501, "band scan unavailable in mock mode")
+        body = self._read_json() or {}
+        try:
+            dwell = float(body.get("dwell", 6.0))
+        except (TypeError, ValueError):
+            dwell = 6.0
+        dwell = max(2.0, min(12.0, dwell))
+        try:
+            with self.app._band_lock:
+                res = qmimod.scan_bands(
+                    channel=self.app._qmi_channel, dwell=dwell,
+                    measure=self.app.modem.signal)
+        except Exception as exc:  # noqa: BLE001
+            raise ApiError(502, "band scan failed: %s" % exc)
+        if not res.get("ok"):
+            raise ApiError(502, "band scan failed: %s"
+                           % res.get("error", "unknown"))
+        # annotate each row with usability (same hint the overview uses)
+        for row in res.get("results", []):
+            row["usable"] = modemmod.band_usable(row.get("band"))[0]
         return res
 
     # --- SMS ---------------------------------------------------------------
@@ -1207,6 +1243,7 @@ ROUTES = [
     ("POST",   r"/api/network/netmode",  "ep_network_netmode", True, True),
     ("GET",    r"/api/band",             "ep_band_get",       True,  False),
     ("POST",   r"/api/band",             "ep_band_set",       True,  True),
+    ("POST",   r"/api/band/scan",        "ep_band_scan",      True,  True),
 
     ("GET",    r"/api/sms",              "ep_sms_list",       True,  False),
     ("POST",   r"/api/sms",              "ep_sms_send",       True,  True),

@@ -273,6 +273,70 @@ def apply_band(mask, channel=DEFAULT_CHANNEL, permanent=False):
         q.close()
 
 
+def scan_bands(bands=None, channel=DEFAULT_CHANNEL, dwell=4.0, measure=None,
+               restore=True):
+    """Sweep each usable band: briefly lock it, see if a cell appears + how
+    strong, then restore the pre-scan lock. Disruptive (~dwell*len(bands)s).
+
+    ``measure`` is an optional callable returning a signal dict shaped like
+    modem.signal() ({rsrp, earfcn, band, cells:[{band,earfcn,rsrp}]}); it is
+    read once per band (while that band is locked) to get the RSRP.
+    """
+    bands = bands or SUPPORTED
+    try:
+        q = Qmi(channel)
+    except OSError as exc:
+        return {"ok": False, "error": "open %s: %s" % (channel, exc)}
+    try:
+        if q.alloc_nas() is None:
+            return {"ok": False, "error": "could not allocate NAS client"}
+        original = q.get_band_pref()
+        results = []
+        for label in bands:
+            mask = bands_to_mask(label)
+            if mask == 0:
+                continue
+            ok, _, _ = q.set_band_pref(mask)
+            if not ok:                       # one retry on a transient reject
+                time.sleep(0.5)
+                ok, _, _ = q.set_band_pref(mask)
+            if not ok:
+                results.append({"band": label, "error": "set failed",
+                                "available": False})
+                continue
+            time.sleep(dwell)
+            reg, _sband, _earfcn = q.get_serving()
+            # Availability is judged ONLY by a measured cell that actually
+            # belongs to the locked band (the serving EARFCN from get_serving
+            # is unreliable mid-retune), or a full registration.
+            rsrp = None
+            earfcn = None
+            if measure is not None:
+                try:
+                    sig = measure() or {}
+                except Exception:  # noqa: BLE001
+                    sig = {}
+                same = [c for c in (sig.get("cells") or [])
+                        if c.get("band") == label and c.get("rsrp") is not None]
+                if same:
+                    best = max(same, key=lambda c: c["rsrp"])
+                    rsrp, earfcn = best["rsrp"], best.get("earfcn")
+                elif sig.get("band") == label and sig.get("rsrp") is not None:
+                    rsrp, earfcn = sig["rsrp"], sig.get("earfcn")
+            available = bool(rsrp is not None or reg == "registered")
+            results.append({"band": label, "reg_state": reg,
+                            "earfcn": earfcn, "rsrp": rsrp,
+                            "available": available})
+        target = original if restore else None
+        if target:
+            q.set_band_pref(target)
+        return {"ok": True, "results": results,
+                "restored_mask_hex": ("0x%016x" % target) if target else None,
+                "restored_bands": mask_to_bands(target) if target else []}
+    finally:
+        q.close()
+
+
 def save_mask(mask, path=DEFAULT_MASKFILE):
     with open(path, "w") as fh:
         fh.write("0x%016x\n" % mask)

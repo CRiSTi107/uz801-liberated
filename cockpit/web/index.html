@@ -369,11 +369,15 @@
 
         <div class="card">
           <h2>LTE band lock<span class="spacer"></span>
+            <button class="btn ghost small" id="band-scan">Scan bands</button>
             <button class="btn ghost small" id="band-read">Read current</button></h2>
           <div class="hint mb8">This dongle can use <span class="mono">B1/B3/B5/B8/B40</span> only.
             The strong local cell is often <span class="mono">B20 (800 MHz)</span>, which the
-            antenna <b>can't</b> use — locking to a usable band stops the modem camping on it.</div>
+            antenna <b>can't</b> use — locking to a usable band stops the modem camping on it.
+            <b>Scan bands</b> briefly tries each band to see which has a usable cell right now
+            (takes ~35s and drops data during the sweep).</div>
           <div id="band-serving" class="hint mb8"></div>
+          <div id="band-scan-results" class="mb8" hidden></div>
           <label class="field"><span>Lock to band</span>
             <select id="band-sel">
               <option value="auto">Auto (all supported bands)</option>

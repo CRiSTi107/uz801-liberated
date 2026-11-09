@@ -664,6 +664,53 @@
     } catch (e) { /* toast shown (incl. 'not configured' guidance) */ }
   });
 
+  async function lockBand(label) {
+    const sel = $("#band-sel");
+    if (sel) sel.value = label;
+    try {
+      await act(api.post("/band", { bands: label }), "Locked to " + label);
+      readBand();
+    } catch (e) { /* toast shown */ }
+  }
+  // expose for the per-row buttons rendered below
+  window.__lockBand = lockBand;
+
+  $("#band-scan")?.addEventListener("click", async () => {
+    const box = $("#band-scan-results"), btn = $("#band-scan");
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = `<div class="hint">Scanning B1/B3/B5/B8/B40… ~35s — ` +
+      `cellular data drops during the sweep.</div>`;
+    if (btn) btn.disabled = true;
+    try {
+      const r = await api.post("/band/scan", {});
+      const rows = (r.results || []).slice().sort((a, b) =>
+        (b.rsrp ?? -999) - (a.rsrp ?? -999));
+      if (!rows.length) { box.innerHTML = `<div class="hint">No results.</div>`; return; }
+      const body = rows.map(row => {
+        const has = row.rsrp != null || row.available;
+        const sig = row.rsrp != null ? `${esc(String(row.rsrp))} dBm` :
+          (row.available ? "cell found" : "—");
+        const status = has
+          ? `<span class="ok">available${row.reg_state ? " · " + esc(row.reg_state) : ""}</span>`
+          : `<span class="muted">no cell</span>`;
+        const lockBtn = `<button class="btn ghost small" onclick="__lockBand('${esc(row.band)}')">Lock ${esc(row.band)}</button>`;
+        return `<tr><td class="mono">${esc(row.band)}</td><td>${sig}</td>` +
+               `<td>${status}</td><td style="text-align:right">${lockBtn}</td></tr>`;
+      }).join("");
+      box.innerHTML =
+        `<div class="hint mb8">Best signal first. Restored lock: ` +
+        `<span class="mono">${esc((r.restored_bands || []).join(", ") || "—")}</span>.</div>` +
+        `<table><thead><tr><th>Band</th><th>Signal</th>` +
+        `<th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+    } catch (e) {
+      box.innerHTML = `<div class="hint bad">Scan failed` +
+        `${e && e.message ? ": " + esc(e.message) : ""}.</div>`;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
   async function readBand() {
     try {
       const b = await api.get("/band");
