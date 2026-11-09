@@ -75,3 +75,13 @@ log see the Status Log in [`README.md`](README.md).
 - Owner added PC-side routing helpers under `host/` (`setup-host-routing.sh` + `README.md`):
   pin the dongle iface to name `uz801` by USB ID and make it the lowest-priority default
   gateway (metric 2000), so plugging it in doesn't hijack the PC's default route.
+
+### Continuity wrap-up
+- Committed the owner's `host/` routing helper (`282d54f`) and this `SESSION-HISTORY.md`
+  (`622c017`); all work pushed to `origin/master`, tree clean.
+- Owner asked whether Claude has a "history" skill to preserve the chat. Answer: **no** — no
+  such skill is available in this session; continuity is manual (memory files + the README
+  Status Log + `PROGRESS.md` + this file). `SESSION-HISTORY.md` is a reconstructed summary,
+  not a verbatim transcript (true verbatim would come from Claude Code's own on-disk session
+  transcript, not from Claude rewriting it).
+- Open thread: owner mentioned a specific skill name for history to check next time.
