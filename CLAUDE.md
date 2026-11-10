@@ -4,18 +4,23 @@ This repo is a reverse-engineering / security / custom-firmware project on a **U
 4G USB-WiFi dongle** (Qualcomm MSM8916, Android 4.4.4). If you're a fresh session (or a
 new machine that pulled this repo), **start here, then read [`PROGRESS.md`](PROGRESS.md)**
 — it is the canonical, always-current state + "resume here" next actions.
-Day-by-day history is the Status Log in [`README.md`](README.md).
+Day-by-day history is the Status Log in [`docs/INVESTIGATION-LOG.md`](docs/INVESTIGATION-LOG.md).
 
 ## Standing rules for this repository (always do these)
 1. **Keep continuity portable.** At the end of any working session, UPDATE:
    - [`PROGRESS.md`](PROGRESS.md) — the status table, the on-device architecture, and the
      top **"▶ RESUME HERE"** block (current state one-liner + exact next actions + open decisions).
-   - [`README.md`](README.md) — append one dated line to the Status Log.
+   - [`docs/INVESTIGATION-LOG.md`](docs/INVESTIGATION-LOG.md) — append one dated line to the Status Log.
    Then commit (and push if a remote is set). This is how another PC continues without this chat.
 2. **Never put secrets in git.** Passwords live in a local, gitignored `CREDENTIALS` file
    (SSH-root, cockpit-admin, WiFi). Also gitignored: `cockpit/api/config.json`, `*.db`,
-   `cockpit/api/certs/`, `**/proxy.env`, `dump/*.img`. If you generate creds, hand them to
-   the user out-of-band and reference them as "in local CREDENTIALS", never commit them.
+   `cockpit/api/certs/`, `**/proxy.env`, `dump/*.img`, `IDENTIFIERS.local.md`. If you generate
+   creds, hand them to the user out-of-band and reference them as "in local CREDENTIALS",
+   never commit them.
+   - **This repo is PUBLIC.** Real device/SIM identifiers (IMEI/IMSI/ICCID/MAC/SSID) are
+     **redacted to masked placeholders** (`...XXXXX`) in all tracked files. The real values
+     live only in the local, gitignored `IDENTIFIERS.local.md`. Never re-introduce a real
+     identifier, credential, or personal detail into a tracked file.
 3. **Don't break the lifelines / brick the device** (see Safety below) — confirm USB-ADB
    root AND SSH still work before any decommission/delete/flash step.
 
@@ -52,10 +57,14 @@ Day-by-day history is the Status Log in [`README.md`](README.md).
 ## Repo map
 `cockpit/api` (Python-stdlib HTTPS API) · `cockpit/web` (SPA) · `alpine/` (chroot scaffolding)
 · `webui/deploy` (device scripts: harden/boot-hook/start-webui) · `dump/` (firmware text records;
-`.img` gitignored) · docs: `PROGRESS.md`, `SPECS.md`, `SECURITY-AUDIT.md`, `EXPLOITS.md`,
-`IP-INVESTIGATION.md`, `CAPABILITIES.md`, `ANTENNA.md`, `*-PLAN.md`.
+`.img` gitignored) · `host/` (PC-side helpers) · `diag/` (QMI/DIAG probes + band tests).
+Docs live under **`docs/`** (see `docs/README.md` for the full index):
+`docs/security/` (`SECURITY-AUDIT.md`, `EXPLOITS.md`, `IP-INVESTIGATION.md`),
+`docs/hardware/` (`SPECS.md`, `CAPABILITIES.md`, `ANTENNA.md`),
+`docs/plans/` (`COCKPIT-API-PLAN.md`, `CHROOT-LINUX-PLAN.md`, `BANDLOCK-LINUX-PLAN.md`,
+`LINUX-OPTIONS.md`), plus `docs/SESSION-HISTORY.md`. Root keeps `README.md`, `PROGRESS.md`, `CLAUDE.md`.
 
 ## Current blocker (as of last session)
 Cellular **signal/band mismatch** gates SMS/calls/data — the fix is a directional **B1/B3
-LTE antenna** (hardware, owner's side; see `ANTENNA.md`/`CAPABILITIES.md`). Software is at a
-clean checkpoint. See `PROGRESS.md` ▶ RESUME HERE for the exact next actions.
+LTE antenna** (hardware, owner's side; see `docs/hardware/ANTENNA.md` / `docs/hardware/CAPABILITIES.md`).
+Software is at a clean checkpoint. See `PROGRESS.md` ▶ RESUME HERE for the exact next actions.

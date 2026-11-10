@@ -43,7 +43,7 @@ serving band moved off **B20** immediately to **B1 (EARFCN 525)** and held on **
 (exactly as predicted). Band-lock is correct + necessary but not sufficient. ▶ NEXT (optional):
 wire `qmi_bandlock.py --apply` into `boot-hook.sh` to persist the lock across reboots (runtime, so
 it must be re-applied each boot; needs `mknod /dev/smdcntl8 c 244 8`). Else: antenna (owner side).
-Details: [`BANDLOCK-LINUX-PLAN.md`](BANDLOCK-LINUX-PLAN.md).
+Details: [`BANDLOCK-LINUX-PLAN.md`](docs/plans/BANDLOCK-LINUX-PLAN.md).
 
 **2026-11-09 — on-device DIAG band-lock (Route B) is a confirmed DEAD END.** Built
 `diag/qcdiag_efs.py` (EFS2 + legacy NV_READ over the proven `/dev/diag` transport). The transport
@@ -56,7 +56,7 @@ Route B cannot be done here. Nothing was written to the modem (read-only through
 **Remaining band-lock options:** Route A (QMI runtime band-pref via `qmuxd` — needs a custom
 QMUX client, high effort/uncertain) OR fall back to the **RF fix (directional B1/B3 antenna)** —
 which was already the recommended path, and earlier data pointed at intermittent **EMM attach
-failure** (not band choice) as the real blocker anyway. Details: [`BANDLOCK-LINUX-PLAN.md`](BANDLOCK-LINUX-PLAN.md) Phase 2.
+failure** (not band choice) as the real blocker anyway. Details: [`BANDLOCK-LINUX-PLAN.md`](docs/plans/BANDLOCK-LINUX-PLAN.md) Phase 2.
 
 **2026-11-09 LATEST — WiFi AP is currently BROKEN (even with the stock app); needs a COLD
 power-cycle.** During the app-delete work the WiFi hotspot stopped coming up: after warm reboots
@@ -123,14 +123,14 @@ creds in local `CREDENTIALS`).
 ## 1. What this project did (high level)
 1. **Rooted** the dongle via its own stock backdoor (unauth web funcNo 2001 → ADB), one-time.
 2. **Dumped** all 25 firmware partitions (md5-verified) — see [`dump/`](dump/) (images gitignored; text records kept).
-3. **Security-audited** the firmware (two passes) — [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md), [`EXPLOITS.md`](EXPLOITS.md), [`IP-INVESTIGATION.md`](IP-INVESTIGATION.md).
+3. **Security-audited** the firmware (two passes) — [`SECURITY-AUDIT.md`](docs/security/SECURITY-AUDIT.md), [`EXPLOITS.md`](docs/security/EXPLOITS.md), [`IP-INVESTIGATION.md`](docs/security/IP-INVESTIGATION.md).
 4. **Hardened** it (closed remote ADB, cellular-WAN inbound, phone-home) while keeping USB-ADB root.
 5. Built a **new authenticated "cockpit"** (API + dashboard) to replace the insecure stock web UI.
 6. Stood up an **Alpine Linux chroot** on the device (python/ssh/tailscale/adguard + the cockpit).
 7. **Decommissioned the Chinese backdoor** (unauth `:80`/OTA walled off) — app still present, not yet deleted.
-8. Diagnosed the SIM/data: works, but **signal-gated by a band mismatch** (hardware) — see [`CAPABILITIES.md`](CAPABILITIES.md), [`ANTENNA.md`](ANTENNA.md).
+8. Diagnosed the SIM/data: works, but **signal-gated by a band mismatch** (hardware) — see [`CAPABILITIES.md`](docs/hardware/CAPABILITIES.md), [`ANTENNA.md`](docs/hardware/ANTENNA.md).
 
-## 2. Hardware (summary; full detail in [`SPECS.md`](SPECS.md))
+## 2. Hardware (summary; full detail in [`SPECS.md`](docs/hardware/SPECS.md))
 MSM8916 (Snapdragon 410-class), 2×Cortex-A53 ≤1.19 GHz, Adreno 306, ~388 MB usable RAM,
 ~4 GB eMMC, Android 4.4.4 / kernel 3.10, LTE **FDD B1/B3/B5/B8 + TDD B40** (no B20/B7),
 WCN3620 WiFi/BT, USB **gadget-only** (no host/OTG). IMEI/IMSI/ICCID readable; SMS supported.
@@ -178,10 +178,10 @@ All services **auto-start on boot** via `/system/etc/init.qcom.post_boot.sh` →
 
 ## 6. Repo layout
 - [`README.md`](README.md) — chronological investigation log.
-- [`SPECS.md`](SPECS.md) — full hardware specs.
-- [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md) · [`EXPLOITS.md`](EXPLOITS.md) · [`IP-INVESTIGATION.md`](IP-INVESTIGATION.md) — security.
-- [`CAPABILITIES.md`](CAPABILITIES.md) · [`ANTENNA.md`](ANTENNA.md) — bands/carriers + antenna guidance.
-- [`LINUX-OPTIONS.md`](LINUX-OPTIONS.md) · [`CHROOT-LINUX-PLAN.md`](CHROOT-LINUX-PLAN.md) · [`COCKPIT-API-PLAN.md`](COCKPIT-API-PLAN.md) — plans.
+- [`SPECS.md`](docs/hardware/SPECS.md) — full hardware specs.
+- [`SECURITY-AUDIT.md`](docs/security/SECURITY-AUDIT.md) · [`EXPLOITS.md`](docs/security/EXPLOITS.md) · [`IP-INVESTIGATION.md`](docs/security/IP-INVESTIGATION.md) — security.
+- [`CAPABILITIES.md`](docs/hardware/CAPABILITIES.md) · [`ANTENNA.md`](docs/hardware/ANTENNA.md) — bands/carriers + antenna guidance.
+- [`LINUX-OPTIONS.md`](docs/plans/LINUX-OPTIONS.md) · [`CHROOT-LINUX-PLAN.md`](docs/plans/CHROOT-LINUX-PLAN.md) · [`COCKPIT-API-PLAN.md`](docs/plans/COCKPIT-API-PLAN.md) — plans.
 - `cockpit/api/` — Python-stdlib HTTPS API (modem AT, SMS/call, auth/TLS, direct platform impls, stock proxy).
 - `cockpit/web/` — vanilla SPA dashboard.
 - `alpine/` — chroot scaffolding (`enter.sh`, `start-services.sh`, `pc-apk-proxy.py`).

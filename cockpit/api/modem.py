@@ -315,9 +315,9 @@ class MockModem:
         if up == "AT+CGDCONT?":
             return ["+CGDCONT: 1,\"IP\",\"internet\",\"10.74.88.195\",0,0"]
         if up == "AT+CGSN":
-            return ["8600180460XXXXX"]
+            return ["860018040000000"]
         if up == "AT+CIMI":
-            return ["22605XXXXXXXXXX"]
+            return ["226050000000000"]
         if up == "AT+CPIN?":
             return ["+CPIN: READY"]
         if up in ("AT+CCID", "AT+ICCID", "AT^ICCID", "AT+QCCID"):

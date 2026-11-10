@@ -23,5 +23,8 @@ cockpit/api/bandlock.mask
 # Local secrets file (owner-maintained) — never commit
 CREDENTIALS
 
+# Local un-redacted identifier reference (real IMEI/IMSI/ICCID/MAC) — never commit
+IDENTIFIERS.local.md
+
 # Modem EFS/NV backup (binary, local-only restore set)
 diag/efs-backup/

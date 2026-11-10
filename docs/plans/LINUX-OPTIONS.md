@@ -1,6 +1,6 @@
 # Installing Linux on the UZ801 — Viability Assessment
 
-Assessment only — **nothing was changed on the device.** See [`SPECS.md`](SPECS.md)
+Assessment only — **nothing was changed on the device.** See [`SPECS.md`](../hardware/SPECS.md)
 for the hardware this is based on.
 
 ## Framing

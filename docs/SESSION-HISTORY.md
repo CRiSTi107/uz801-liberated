@@ -2,8 +2,8 @@
 
 A human-readable log of working sessions with Claude Code (what was asked, what was
 done/found). Newest first. This is a reconstructed summary of each session, not a verbatim
-transcript. For the canonical state see [`PROGRESS.md`](PROGRESS.md); for the terse dated
-log see the Status Log in [`README.md`](README.md).
+transcript. For the canonical state see [`PROGRESS.md`](../PROGRESS.md); for the terse dated
+log see the Status Log in [`README.md`](../README.md).
 
 ---
 
