@@ -2,7 +2,8 @@
 
 Consolidated status of the reverse-engineering, security, and custom-firmware
 work on a **UZ801 4G USB/WiFi dongle** (Qualcomm MSM8916, Android 4.4.4).
-Living log of day-to-day steps is in [`README.md`](README.md); deep docs are linked below.
+Living log of day-to-day steps is in [`docs/INVESTIGATION-LOG.md`](docs/INVESTIGATION-LOG.md);
+deep docs are under [`docs/`](docs/README.md) and linked below.
 
 > **Credentials are NOT stored in this repo.** The SSH-root and cockpit-admin
 > passwords were generated at deploy time and handed to the owner out-of-band.
@@ -10,10 +11,23 @@ Living log of day-to-day steps is in [`README.md`](README.md); deep docs are lin
 
 ---
 
-## ▶ RESUME HERE (last updated 2026-11-09)
+## ▶ RESUME HERE (last updated 2026-11-10)
 **State:** Clean checkpoint. Backdoor **decommissioned** (not deleted), cockpit (API+UI)
 deployed & auto-starting on boot, SSH + USB-ADB root lifelines working, everything committed
-& pushed (`origin` = private `uz801-liberated`). See §5 for the full status table.
+& pushed (`origin` = still-private `uz801-liberated`). See §5 for the full status table.
+
+**2026-11-10 NEWEST 📦 — repo prepped for PUBLIC release (not yet flipped).**
+Redacted all real device/SIM identifiers (IMEI/IMSI/ICCID/MAC/SSID) to masked placeholders
+across the tree **and scrubbed them from all 31 commits** with `git filter-repo` (verified: no
+real identifier in any git object); real values kept only in local gitignored
+`IDENTIFIERS.local.md`. Removed verbatim third-party XDA forum scrapes (`dump/p1-3.txt` +
+`html-forum/`) from history. Restructured docs into `docs/{security,hardware,plans}/` with
+`docs/README.md` index; old README → `docs/INVESTIGATION-LOG.md`; new lean landing `README.md`;
+added consolidated `REPORT.md` security write-up. Force-pushed the cleaned history to `origin`.
+**Repo is still PRIVATE — owner will review the rendered README/REPORT and flip visibility.**
+To go public: `gh repo edit CRiSTi107/uz801-liberated --visibility public` (or delete+recreate
+from the clean local repo for bulletproof removal of pre-scrub objects — needs `delete_repo` scope).
+NOTE for future sessions: never re-introduce a real identifier/credential into a tracked file.
 
 **2026-11-09 NEWEST ✅ — band-lock is now a persisted COCKPIT feature (UI + boot re-apply).**
 The QMI band-lock is wired into the cockpit: `cockpit/api/qmi.py` (shared QMI module), `GET/POST
